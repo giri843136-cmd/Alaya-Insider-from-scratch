@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
+import { rateLimit, getClientIP } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
   ensureDbReady();
+
+  // Rate limit: 10 login attempts per minute per IP
+  const ip = getClientIP(req);
+  const rl = rateLimit(`login:${ip}`, 10, 60000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Too many login attempts. Please wait a moment.' }, { status: 429 });
+  }
+
   try {
     const { email, password } = await req.json();
     if (!email || !password) {

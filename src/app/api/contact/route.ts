@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { v4 as uuid } from 'uuid';
+import { rateLimit, getClientIP } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   ensureDbReady();
+  const rl = rateLimit(`contact:${getClientIP(req)}`, 5, 60000);
+  if (!rl.allowed) return NextResponse.json({ error: "Too many submissions. Please wait." }, { status: 429 });
   const { name, email, reason, message } = await req.json();
 
   if (!email || !message) {

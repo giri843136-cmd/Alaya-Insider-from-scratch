@@ -180,3 +180,38 @@ pm2 restart alayainsider
 - **Never** commit `.env` to Git
 - **Always** backup database before major changes
 - The application binds to port 3000 by default
+
+## Pre-Flight Checklist
+
+Before going live, complete every item:
+
+- [ ] VPS provisioned with persistent storage
+- [ ] Node.js 18+ installed
+- [ ] Application code deployed
+- [ ] `data/` directory exists on persistent disk
+- [ ] `uploads/` directory exists on persistent disk
+- [ ] Database restored from backup
+- [ ] Uploads restored from backup
+- [ ] `.env` configured with all required variables
+- [ ] `AUTH_SECRET` set (64+ chars, `openssl rand -base64 48`)
+- [ ] `ADMIN_SEED_PASSWORD` set (for first-time setup only)
+- [ ] **Admin password changed from any old default** ⚠️
+- [ ] `npm install` completed
+- [ ] `npm run build` successful
+- [ ] PM2 or systemd configured
+- [ ] Reverse proxy (Nginx) configured
+- [ ] SSL certificate installed (Let's Encrypt)
+- [ ] HTTP → HTTPS redirect working
+- [ ] DNS pointing to VPS IP
+- [ ] `SMTP_HOST/USER/PASS` configured
+- [ ] `NEXT_PUBLIC_ANALYTICS_ID` configured
+- [ ] Product images uploaded via admin
+- [ ] Hero images uploaded via admin
+- [ ] Category images uploaded via admin
+- [ ] Live smoke test passed (homepage, product, redirect, admin)
+- [ ] Database backup created
+- [ ] Server reboot test passed
+
+### ⚠️ Critical Security Note
+
+The old default admin password exists in Git history. **You MUST set a completely new, unique admin password** before production. Never reuse any password from the repository history.

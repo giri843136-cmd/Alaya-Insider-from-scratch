@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
+import { rateLimit, getClientIP } from "@/lib/rate-limit";
 import { getAuthUser } from '@/lib/auth';
 import { v4 as uuid } from 'uuid';
 
@@ -23,6 +24,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   ensureDbReady();
+  const rl = rateLimit(`newsletter:${getClientIP(req)}`, 5, 60000);
+  if (!rl.allowed) return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
   const { email, first_name, source } = await req.json();
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {

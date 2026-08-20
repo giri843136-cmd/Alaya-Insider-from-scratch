@@ -3,12 +3,15 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { v4 as uuid } from 'uuid';
+import { rateLimit, getClientIP } from "@/lib/rate-limit";
 import path from 'path';
 import fs from 'fs';
 
 export async function POST(req: NextRequest) {
   ensureDbReady();
   const user = await getAuthUser();
+  const rl = rateLimit(`upload:${getClientIP(req)}`, 20, 60000);
+  if (!rl.allowed) return NextResponse.json({ error: "Too many uploads. Please wait." }, { status: 429 });
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
