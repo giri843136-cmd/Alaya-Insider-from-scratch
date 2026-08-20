@@ -14,7 +14,7 @@ function getHomeData() {
   const sMap: Record<string, any> = {};
   sections.forEach(s => { sMap[s.section_key] = { ...s, content: JSON.parse(s.content || '{}') }; });
 
-  const featuredCats = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.status = 'published' AND p.deleted_at IS NULL) as product_count FROM categories c WHERE c.parent_id IS NULL AND c.is_featured = 1 ORDER BY c.sort_order LIMIT 6`).all();
+  const featuredCats = db.prepare(`SELECT c.id, c.name, c.slug, c.description, c.image FROM categories c WHERE c.parent_id IS NULL AND c.is_featured = 1 ORDER BY c.sort_order LIMIT 6`).all();
   const trending = db.prepare(`SELECT p.*, b.name as brand_name, b.slug as brand_slug, c.name as category_name FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_trending = 1 AND p.status = 'published' AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 8`).all();
   const editorsPicks = db.prepare(`SELECT p.*, b.name as brand_name, b.slug as brand_slug, c.name as category_name FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_editors_pick = 1 AND p.status = 'published' AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 4`).all();
   const popular = db.prepare(`SELECT p.*, b.name as brand_name, b.slug as brand_slug, c.name as category_name FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id WHERE p.status = 'published' AND p.deleted_at IS NULL ORDER BY p.click_count DESC LIMIT 4`).all();
@@ -62,13 +62,30 @@ export default function HomePage() {
       {sMap['featured_categories']?.is_visible === 1 && (featuredCats as any[]).length > 0 && (
         <section className="py-14 px-4">
           <div className="max-w-content mx-auto">
-            <h2 className="text-xl font-semibold text-accent mb-6">{sMap['featured_categories'].title}</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-              {(featuredCats as any[]).map(c => (
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold text-accent">{sMap['featured_categories'].title}</h2>
+              <p className="text-sm text-gray-400 mt-1">{sMap['featured_categories'].content?.subtitle || 'Explore curated finds across the spaces, styles and essentials that matter most.'}</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {(featuredCats as any[]).map((c: any) => (
                 <Link key={c.id} href={`/category/${c.slug}`}
-                  className="group bg-ivory rounded-lg p-5 text-center hover:shadow-md transition-all border border-transparent hover:border-gray-200">
-                  <h3 className="text-sm font-medium text-accent group-hover:text-plum transition-colors">{c.name}</h3>
-                  <p className="text-[11px] text-gray-400 mt-1">{c.product_count} items</p>
+                  className="group block bg-white rounded-lg overflow-hidden border border-gray-100 hover:border-gray-200 hover:shadow-md transition-all duration-200">
+                  <div className="aspect-[4/3] bg-ivory overflow-hidden">
+                    {c.image ? (
+                      <img src={c.image} alt={c.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-200" loading="lazy" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-200">
+                        <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <h3 className="text-base font-semibold text-accent group-hover:text-plum transition-colors">{c.name}</h3>
+                    {c.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{c.description}</p>}
+                    <span className="text-xs font-medium text-warm mt-3 inline-flex items-center gap-1 group-hover:gap-2 transition-all">
+                      Explore {c.name} <span className="transition-transform group-hover:translate-x-0.5">→</span>
+                    </span>
+                  </div>
                 </Link>
               ))}
             </div>
