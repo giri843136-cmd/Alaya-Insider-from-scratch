@@ -17,7 +17,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ slug
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { slug } = await params;
   const data = await req.json();
-  getDb().prepare('UPDATE pages SET title=?, content=?, seo_title=?, seo_description=?, updated_at=datetime("now") WHERE slug=?')
+  getDb().prepare('UPDATE pages SET title=?, content=?, seo_title=?, seo_description=?, updated_at=datetime('now') WHERE slug=?')
     .run(data.title, data.content, data.seo_title||'', data.seo_description||'', slug);
   return NextResponse.json({ success: true });
 }

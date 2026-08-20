@@ -58,6 +58,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id } = await params;
-  getDb().prepare('UPDATE articles SET deleted_at = datetime("now") WHERE id = ?').run(id);
+  getDb().prepare("UPDATE articles SET deleted_at = datetime('now') WHERE id = ?").run(id);
   return NextResponse.json({ success: true });
 }

@@ -139,9 +139,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const data = await req.json();
+    if (!data.name || !data.name.trim()) {
+      return NextResponse.json({ error: 'Product name is required' }, { status: 400 });
+    }
     const db = getDb();
     const id = uuid();
-    const slug = data.slug || slugify(data.name || '', { lower: true, strict: true });
+    const slug = data.slug || slugify(data.name.trim(), { lower: true, strict: true });
+    if (!slug) {
+      return NextResponse.json({ error: 'Could not generate a valid URL slug from the product name' }, { status: 400 });
+    }
 
     // Check slug uniqueness
     const existing = db.prepare('SELECT id FROM products WHERE slug = ?').get(slug);
