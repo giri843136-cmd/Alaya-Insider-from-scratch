@@ -3,6 +3,7 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import ProductCard from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
+import HeroCarousel from '@/components/public/HeroCarousel';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,13 +22,19 @@ function getHomeData() {
   const collections = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM collection_products cp WHERE cp.collection_id = c.id) as product_count FROM collections c WHERE c.is_active = 1 ORDER BY c.sort_order LIMIT 3`).all();
   const disclosure = (db.prepare("SELECT value FROM site_settings WHERE key = 'affiliate_disclosure'").get() as any)?.value || '';
 
-  return { sMap, featuredCats, trending, editorsPicks, popular, articles, collections, disclosure };
+  // Hero slides
+  const heroSlides = db.prepare(`SELECT * FROM hero_slides WHERE status = 'published'
+    AND (start_date IS NULL OR start_date <= datetime('now'))
+    AND (end_date IS NULL OR end_date >= datetime('now'))
+    ORDER BY sort_order ASC`).all();
+  const heroSettings: Record<string, string> = {};
+  (db.prepare('SELECT * FROM hero_settings').all() as any[]).forEach((s: any) => { heroSettings[s.key] = s.value; });
+
+  return { sMap, featuredCats, trending, editorsPicks, popular, articles, collections, disclosure, heroSlides, heroSettings };
 }
 
 export default function HomePage() {
-  const { sMap, featuredCats, trending, editorsPicks, popular, articles, collections, disclosure } = getHomeData();
-  const hero = sMap['hero'];
-  const hc = hero?.content || {};
+  const { sMap, featuredCats, trending, editorsPicks, popular, articles, collections, disclosure, heroSlides, heroSettings } = getHomeData();
   const destSec = sMap['destinations'];
   const dc = destSec?.content || {};
 
@@ -40,25 +47,16 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Hero */}
-      {hero?.is_visible === 1 && (
-        <section className="bg-ivory">
-          <div className="max-w-content mx-auto px-4 sm:px-6 py-16 sm:py-24">
-            <div className="max-w-2xl">
-              <h1 className="text-3xl sm:text-5xl font-semibold text-accent leading-tight mb-4">{hero.title}</h1>
-              <p className="text-gray-500 text-base sm:text-lg mb-8 max-w-xl leading-relaxed">{hc.subtitle}</p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link href={hc.primary_cta_link || '/products'}
-                  className="px-8 py-3 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-light transition-colors text-center">
-                  {hc.primary_cta || 'Explore the Collection'}
-                </Link>
-                <Link href={hc.secondary_cta_link || '/journal'}
-                  className="px-8 py-3 border border-gray-300 text-gray-600 text-sm font-medium rounded-lg hover:border-accent hover:text-accent transition-colors text-center">
-                  {hc.secondary_cta || 'Read Our Guides'}
-                </Link>
-              </div>
-            </div>
-          </div>
+      {/* Hero Carousel */}
+      {(heroSlides as any[]).length > 0 && (
+        <section className="max-w-content mx-auto">
+          <HeroCarousel
+            slides={heroSlides as any[]}
+            autoplay={heroSettings.autoplay !== 'false'}
+            interval={parseInt(heroSettings.interval || '5000')}
+            transition={heroSettings.transition || 'fade'}
+            transitionDuration={parseInt(heroSettings.transition_duration || '500')}
+          />
         </section>
       )}
 

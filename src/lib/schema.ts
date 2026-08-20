@@ -214,6 +214,39 @@ export function initializeDatabase() {
       id TEXT PRIMARY KEY, query TEXT NOT NULL, results_count INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Hero Carousel Slides
+    CREATE TABLE IF NOT EXISTS hero_slides (
+      id TEXT PRIMARY KEY,
+      eyebrow TEXT DEFAULT '',
+      headline TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      primary_cta_label TEXT DEFAULT '',
+      primary_cta_url TEXT DEFAULT '',
+      secondary_cta_label TEXT DEFAULT '',
+      secondary_cta_url TEXT DEFAULT '',
+      desktop_image TEXT DEFAULT '',
+      tablet_image TEXT DEFAULT '',
+      mobile_image TEXT DEFAULT '',
+      background_color TEXT DEFAULT '#f8f6f3',
+      text_alignment TEXT DEFAULT 'left',
+      text_color TEXT DEFAULT 'dark',
+      overlay_strength REAL DEFAULT 0,
+      layout TEXT DEFAULT 'text-left',
+      status TEXT DEFAULT 'draft' CHECK(status IN ('draft','published','archived')),
+      sort_order INTEGER DEFAULT 0,
+      start_date TEXT,
+      end_date TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_hero_slides_status ON hero_slides(status);
+
+    -- Hero Settings
+    CREATE TABLE IF NOT EXISTS hero_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT DEFAULT ''
+    );
   `);
   return db;
 }
@@ -292,6 +325,30 @@ export function seedSettings() {
   ];
   const stmt = db.prepare('INSERT INTO site_settings (key, value, group_name) VALUES (?, ?, ?)');
   for (const s of settings) stmt.run(s.key, s.value, s.group);
+}
+
+export function seedHeroSlides() {
+  const db = getDb();
+  if ((db.prepare('SELECT COUNT(*) as cnt FROM hero_slides').get() as any).cnt > 0) return;
+
+  const slides = [
+    { eyebrow: 'CURATED THIS SEASON', headline: 'Everyday Finds, Better Chosen', description: 'Discover useful pieces for work, home and everything in between.', primary_cta_label: 'Explore the Collection', primary_cta_url: '/products', secondary_cta_label: 'Browse New Finds', secondary_cta_url: '/collections', bg: '#f0eff5', layout: 'text-left' },
+    { eyebrow: 'STYLE EDIT', headline: 'Easy Pieces Worth Repeating', description: 'Practical fashion picks designed for everyday wardrobes.', primary_cta_label: 'Explore Fashion', primary_cta_url: '/category/fashion', secondary_cta_label: '', secondary_cta_url: '', bg: '#f5f0eb', layout: 'text-left' },
+    { eyebrow: 'HOME EDIT', headline: 'Small Changes. A Better Home.', description: 'Thoughtful upgrades for spaces that feel more like you.', primary_cta_label: 'Explore Home', primary_cta_url: '/category/home', secondary_cta_label: '', secondary_cta_url: '', bg: '#eef2eb', layout: 'text-left' },
+    { eyebrow: 'TRAVEL EDIT', headline: 'Pack Better. Travel Lighter.', description: 'Smart essentials for weekends away and longer journeys.', primary_cta_label: 'Explore Travel', primary_cta_url: '/category/travel', secondary_cta_label: '', secondary_cta_url: '', bg: '#ebe9f0', layout: 'text-left' },
+    { eyebrow: 'BEAUTY PICKS', headline: 'Simple Additions, Better Routines', description: 'Curated beauty essentials worth making room for.', primary_cta_label: 'Explore Beauty', primary_cta_url: '/category/beauty', secondary_cta_label: '', secondary_cta_url: '', bg: '#f5eeee', layout: 'text-left' },
+    { eyebrow: 'SMART LIVING', headline: 'Useful Tech Without the Noise', description: 'Practical gadgets and everyday upgrades selected with purpose.', primary_cta_label: 'Explore Tech', primary_cta_url: '/category/electronics', secondary_cta_label: '', secondary_cta_url: '', bg: '#edf0f5', layout: 'text-left' },
+  ];
+
+  const s = db.prepare(`INSERT INTO hero_slides (id, eyebrow, headline, description, primary_cta_label, primary_cta_url, secondary_cta_label, secondary_cta_url, background_color, layout, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`);
+  slides.forEach((sl, i) => s.run(uuid(), sl.eyebrow, sl.headline, sl.description, sl.primary_cta_label, sl.primary_cta_url, sl.secondary_cta_label, sl.secondary_cta_url, sl.bg, sl.layout, i));
+
+  // Hero settings
+  const hs = db.prepare("INSERT OR IGNORE INTO hero_settings (key, value) VALUES (?, ?)");
+  hs.run('autoplay', 'true');
+  hs.run('interval', '5000');
+  hs.run('transition', 'fade');
+  hs.run('transition_duration', '500');
 }
 
 export function seedArticleCategories() {

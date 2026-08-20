@@ -1,0 +1,206 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
+
+interface Slide {
+  id: string; eyebrow: string; headline: string; description: string;
+  primary_cta_label: string; primary_cta_url: string;
+  secondary_cta_label: string; secondary_cta_url: string;
+  desktop_image: string; tablet_image: string; mobile_image: string;
+  background_color: string; text_alignment: string; text_color: string;
+  layout: string;
+}
+
+interface Props {
+  slides: Slide[];
+  autoplay?: boolean;
+  interval?: number;
+  transition?: string;
+  transitionDuration?: number;
+}
+
+export default function HeroCarousel({ slides, autoplay = true, interval = 5000, transition = 'fade', transitionDuration = 500 }: Props) {
+  const [current, setCurrent] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+  const timerRef = useRef<any>(null);
+  const carouselRef = useRef<HTMLDivElement>(null);
+
+  const total = slides.length;
+  if (total === 0) return null;
+
+  const goTo = useCallback((index: number) => {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    setCurrent(((index % total) + total) % total);
+    setTimeout(() => setIsTransitioning(false), transitionDuration);
+  }, [total, isTransitioning, transitionDuration]);
+
+  const next = useCallback(() => goTo(current + 1), [current, goTo]);
+  const prev = useCallback(() => goTo(current - 1), [current, goTo]);
+
+  // Autoplay
+  useEffect(() => {
+    if (!autoplay || isPaused || total <= 1) return;
+    timerRef.current = setInterval(next, interval);
+    return () => clearInterval(timerRef.current);
+  }, [autoplay, isPaused, interval, next, total]);
+
+  // Keyboard
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (!carouselRef.current?.contains(document.activeElement) && document.activeElement !== document.body) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [prev, next]);
+
+  // Touch
+  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.changedTouches[0].screenX; setIsPaused(true); };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    touchEndX.current = e.changedTouches[0].screenX;
+    const diff = touchStartX.current - touchEndX.current;
+    if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+    setTimeout(() => setIsPaused(false), 3000);
+  };
+
+  const slide = slides[current];
+  const isDark = slide.text_color === 'light';
+
+  return (
+    <div
+      ref={carouselRef}
+      className="relative overflow-hidden select-none"
+      role="region"
+      aria-label="Promotional carousel"
+      aria-roledescription="carousel"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onFocus={() => setIsPaused(true)}
+      onBlur={() => setIsPaused(false)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Slides */}
+      <div className="relative" style={{ height: 'clamp(240px, 30vw, 380px)' }}>
+        {slides.map((s, i) => (
+          <div
+            key={s.id}
+            role="tabpanel"
+            aria-roledescription="slide"
+            aria-label={`Slide ${i + 1} of ${total}: ${s.headline}`}
+            aria-hidden={i !== current}
+            className={`absolute inset-0 transition-opacity ${
+              i === current ? 'opacity-100 z-10' : 'opacity-0 z-0'
+            }`}
+            style={{
+              transitionDuration: `${transitionDuration}ms`,
+              backgroundColor: s.background_color || '#f8f6f3',
+            }}
+          >
+            {/* Background image */}
+            {s.desktop_image && (
+              <img
+                src={s.desktop_image}
+                alt={s.headline || 'Promotional image'}
+                className="absolute inset-0 w-full h-full object-cover"
+                loading={i === 0 ? 'eager' : 'lazy'}
+                fetchPriority={i === 0 ? 'high' : undefined}
+              />
+            )}
+
+            {/* Content */}
+            <div className="relative z-10 h-full max-w-content mx-auto px-6 sm:px-10 flex items-center">
+              <div className={`max-w-lg ${s.layout === 'text-right' ? 'ml-auto text-right' : ''}`}>
+                {s.eyebrow && (
+                  <span className={`text-[10px] sm:text-xs font-semibold uppercase tracking-[0.2em] ${isDark ? 'text-white/60' : 'text-warm'}`}>
+                    {s.eyebrow}
+                  </span>
+                )}
+                {s.headline && (
+                  <h2 className={`text-2xl sm:text-3xl lg:text-4xl font-semibold leading-tight mt-2 ${isDark ? 'text-white' : 'text-accent'}`}>
+                    {s.headline}
+                  </h2>
+                )}
+                {s.description && (
+                  <p className={`text-sm sm:text-base mt-3 leading-relaxed max-w-md ${isDark ? 'text-white/70' : 'text-gray-500'} ${s.layout === 'text-right' ? 'ml-auto' : ''}`}>
+                    {s.description}
+                  </p>
+                )}
+                <div className={`flex gap-3 mt-5 ${s.layout === 'text-right' ? 'justify-end' : ''} flex-wrap`}>
+                  {s.primary_cta_label && s.primary_cta_url && (
+                    <Link href={s.primary_cta_url}
+                      className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                        isDark ? 'bg-white text-accent hover:bg-white/90' : 'bg-accent text-white hover:bg-accent-light'
+                      }`}>
+                      {s.primary_cta_label}
+                    </Link>
+                  )}
+                  {s.secondary_cta_label && s.secondary_cta_url && (
+                    <Link href={s.secondary_cta_url}
+                      className={`px-6 py-2.5 text-sm font-medium rounded-lg border transition-colors ${
+                        isDark ? 'border-white/30 text-white hover:bg-white/10' : 'border-gray-300 text-gray-600 hover:border-accent hover:text-accent'
+                      }`}>
+                      {s.secondary_cta_label}
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Previous / Next arrows */}
+      {total > 1 && (
+        <>
+          <button
+            onClick={prev}
+            aria-label="Previous slide"
+            className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-white/50 flex items-center justify-center text-gray-600 hover:bg-white hover:text-accent transition-all opacity-0 group-hover:opacity-100 hover:opacity-100 focus:opacity-100"
+            style={{ opacity: 0.7 }}
+          >
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={next}
+            aria-label="Next slide"
+            className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-white/50 flex items-center justify-center text-gray-600 hover:bg-white hover:text-accent transition-all opacity-0 group-hover:opacity-100 hover:opacity-100 focus:opacity-100"
+            style={{ opacity: 0.7 }}
+          >
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </>
+      )}
+
+      {/* Pagination dots */}
+      {total > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2" role="tablist" aria-label="Slide navigation">
+          {slides.map((s, i) => (
+            <button
+              key={s.id}
+              role="tab"
+              aria-selected={i === current}
+              aria-label={`Go to slide ${i + 1}`}
+              onClick={() => goTo(i)}
+              className={`rounded-full transition-all duration-300 ${
+                i === current
+                  ? 'w-6 h-2 bg-accent'
+                  : 'w-2 h-2 bg-gray-400/40 hover:bg-gray-400/70'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

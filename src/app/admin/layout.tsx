@@ -23,6 +23,7 @@ const navItems = [
   { href: '/admin/affiliate-links', icon: '↗', label: 'Affiliate Links' },
   { href: '/admin/newsletter', icon: '✉', label: 'Newsletter' },
   { href: '/admin/analytics', icon: '▤', label: 'Analytics' },
+  { href: '/admin/hero', icon: '▶', label: 'Hero Carousel' },
   { href: '/admin/homepage', icon: '⌂', label: 'Homepage' },
   { href: '/admin/users', icon: '◉', label: 'Users' },
   { href: '/admin/activity', icon: '↻', label: 'Activity Log' },
