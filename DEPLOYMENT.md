@@ -41,7 +41,8 @@ nano .env
 ```
 
 Fill in:
-- `AUTH_SECRET` — Generate: `openssl rand -base64 48`
+- `AUTH_SECRET` — **Required.** Generate: `openssl rand -base64 48`
+- `ADMIN_SEED_PASSWORD` — Set a strong password for initial admin account creation. Remove after first login.
 - `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` — Your email provider
 - `NEXT_PUBLIC_ANALYTICS_ID` — Google Analytics ID
 - `NEXT_PUBLIC_SITE_URL` — `https://alayainsider.com`

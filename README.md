@@ -15,9 +15,9 @@ npm run start
 
 **URL:** `/admin`
 
-Default credentials are set during first database initialization. Change the password immediately after first login.
+On first run, set `ADMIN_SEED_PASSWORD` in `.env` to create the initial admin account (`admin@alayainsider.com`). Remove the variable after first login.
 
-> ⚠️ Change AUTH_SECRET and admin password before deploying to production.
+> ⚠️ `AUTH_SECRET` is required in production (min 32 chars). The application will not start without it.
 
 ## Architecture
 
@@ -34,7 +34,8 @@ Copy `.env.example` to `.env` and configure:
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `NODE_ENV` | `production` for live deployment | Yes |
-| `AUTH_SECRET` | Random 64+ char secret (`openssl rand -base64 48`) | Yes |
+| `AUTH_SECRET` | Random 64+ char secret (`openssl rand -base64 48`) | Yes (production) |
+| `ADMIN_SEED_PASSWORD` | Initial admin password (first-time setup only) | First run only |
 | `DATABASE_PATH` | SQLite database path (default: `./data/alaya.db`) | Yes |
 | `NEXT_PUBLIC_SITE_URL` | Production URL (e.g., `https://alayainsider.com`) | Yes |
 | `SMTP_HOST` | SMTP server for email | No |

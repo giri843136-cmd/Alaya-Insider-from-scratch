@@ -268,10 +268,23 @@ export function seedRoles() {
 export function seedAdmin() {
   const db = getDb();
   if ((db.prepare('SELECT COUNT(*) as cnt FROM users').get() as any).cnt > 0) return;
+
+  const seedPassword = process.env.ADMIN_SEED_PASSWORD;
+  if (!seedPassword) {
+    console.warn('ADMIN_SEED_PASSWORD not set. Skipping admin user creation.');
+    console.warn('Set ADMIN_SEED_PASSWORD in .env to create the initial admin account.');
+    return;
+  }
+  if (seedPassword.length < 8) {
+    console.warn('ADMIN_SEED_PASSWORD must be at least 8 characters. Skipping admin creation.');
+    return;
+  }
+
   const role = db.prepare("SELECT id FROM roles WHERE name = 'super_admin'").get() as any;
   if (!role) return;
   db.prepare('INSERT INTO users (id, email, username, password_hash, first_name, last_name, role_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(uuid(), 'admin@alayainsider.com', 'admin', bcryptjs.hashSync('((Alaya)1923@+-)', 10), 'Admin', 'User', role.id);
+    .run(uuid(), 'admin@alayainsider.com', 'admin', bcryptjs.hashSync(seedPassword, 10), 'Admin', 'User', role.id);
+  console.log('Admin user created: admin@alayainsider.com');
 }
 
 export function seedHomepageSections() {

@@ -3,7 +3,21 @@ import bcryptjs from 'bcryptjs';
 import { cookies, headers } from 'next/headers';
 import getDb from './db';
 
-const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-secret-change-in-production-min-32-chars-long';
+// Production requires AUTH_SECRET. Development uses a fallback (NEVER use in production).
+const AUTH_SECRET = (() => {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    console.error('FATAL: AUTH_SECRET is required in production. Set it in your .env file.');
+    console.error('Generate one with: openssl rand -base64 48');
+    process.exit(1);
+  }
+  if (secret && secret.length < 32 && process.env.NODE_ENV === 'production') {
+    console.error('FATAL: AUTH_SECRET must be at least 32 characters in production.');
+    process.exit(1);
+  }
+  return secret || 'dev-only-insecure-secret-do-not-use-in-production';
+})();
+
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
 
 export interface AuthUser {
@@ -35,7 +49,6 @@ export function verifyToken(token: string): any {
 
 export async function getAuthUser(): Promise<AuthUser | null> {
   try {
-    // 1. Try Authorization header first (works in cross-origin / proxy envs)
     const hdrs = await headers();
     const authHeader = hdrs.get('authorization');
     let token: string | undefined;
@@ -44,7 +57,6 @@ export async function getAuthUser(): Promise<AuthUser | null> {
       token = authHeader.slice(7);
     }
 
-    // 2. Fall back to cookie
     if (!token) {
       const cookieStore = await cookies();
       token = cookieStore.get('auth_token')?.value;
