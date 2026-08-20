@@ -19,10 +19,14 @@
 
 # debug
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# local env files
-.env*.local
+# environment files — NEVER commit real credentials
 .env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -31,11 +35,21 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# database
+# database — production data must NOT be in Git
 /data/*.db
 /data/*.db-wal
 /data/*.db-shm
+/data/*.sqlite
+/data/*.sqlite3
+/data/*-backup*.db
 
-# uploads
+# uploads — runtime media must NOT be in Git
 /uploads/*
 !/uploads/.gitkeep
+
+# logs
+*.log
+
+# temporary
+*.tmp
+*.temp
