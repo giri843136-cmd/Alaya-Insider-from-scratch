@@ -36,7 +36,7 @@ export default function CategoriesPage() {
             {childMap[cat.id] && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {childMap[cat.id].map((child: any) => (
-                  <Link key={child.id} href={`/category/${child.slug}`}
+                  <Link key={child.id} href={`/category/${cat.slug}/${child.slug}`}
                     className="text-sm px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-md text-gray-600 hover:border-accent hover:text-accent transition-colors">
                     {child.name}
                   </Link>

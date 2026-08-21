@@ -34,14 +34,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
     });
   });
 
-  // Categories
-  const categories = db.prepare('SELECT slug, updated_at FROM categories').all() as any[];
-  categories.forEach(c => {
+  // Categories — hierarchical URLs
+  const mainCats = db.prepare('SELECT id, slug, updated_at FROM categories WHERE parent_id IS NULL ORDER BY sort_order').all() as any[];
+  mainCats.forEach((c: any) => {
     entries.push({
       url: `${baseUrl}/category/${c.slug}`,
       lastModified: c.updated_at,
       changeFrequency: 'weekly',
       priority: 0.7,
+    });
+    // Subcategories under this parent
+    const subs = db.prepare('SELECT slug, updated_at FROM categories WHERE parent_id = ? ORDER BY sort_order').all(c.id) as any[];
+    subs.forEach((s: any) => {
+      entries.push({
+        url: `${baseUrl}/category/${c.slug}/${s.slug}`,
+        lastModified: s.updated_at,
+        changeFrequency: 'weekly',
+        priority: 0.6,
+      });
     });
   });
 

@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
@@ -9,28 +9,78 @@ import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+/* ------------------------------------------------------------------ */
+/*  Resolve the URL segments into a category record                   */
+/*  Supports:                                                         */
+/*    /category/fashion           → main category                     */
+/*    /category/fashion/dresses   → subcategory (hierarchical)        */
+/*    /category/dresses           → redirect → /category/fashion/dresses */
+/* ------------------------------------------------------------------ */
+type ResolveResult = 
+  | { type: 'redirect'; redirect: string }
+  | { type: 'found'; category: any; parent: any | null }
+  | null;
+
+function resolveCategory(slugs: string[]): ResolveResult {
+  const db = getDb();
+
+  if (slugs.length === 1) {
+    const cat = db.prepare('SELECT * FROM categories WHERE slug = ?').get(slugs[0]) as any;
+    if (!cat) return null;
+
+    // If it's a subcategory accessed via flat URL, redirect to hierarchical
+    if (cat.parent_id) {
+      const parent = db.prepare('SELECT slug FROM categories WHERE id = ?').get(cat.parent_id) as any;
+      if (parent) {
+        return { type: 'redirect', redirect: `/category/${parent.slug}/${cat.slug}` };
+      }
+    }
+    return { type: 'found', category: cat, parent: null };
+  }
+
+  if (slugs.length === 2) {
+    const parent = db.prepare('SELECT * FROM categories WHERE slug = ? AND parent_id IS NULL').get(slugs[0]) as any;
+    if (!parent) return null;
+    const child = db.prepare('SELECT * FROM categories WHERE slug = ? AND parent_id = ?').get(slugs[1], parent.id) as any;
+    if (!child) return null;
+    return { type: 'found', category: child, parent };
+  }
+
+  return null;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string[] }> }): Promise<Metadata> {
   ensureDbReady();
   const { slug } = await params;
-  const cat = getDb().prepare('SELECT * FROM categories WHERE slug = ?').get(slug) as any;
-  if (!cat) return { title: 'Category Not Found' };
+  const db = getDb();
+  const resolved = resolveCategory(slug);
+  if (!resolved || resolved.type === 'redirect') return { title: 'Category Not Found' };
+  const cat = resolved.category;
   return {
     title: cat.seo_title || `${cat.name} — Alaya Insider`,
-    description: cat.seo_description || cat.description,
+    description: cat.seo_description || cat.description || `Discover curated ${cat.name.toLowerCase()} picks on Alaya Insider.`,
   };
 }
 
-export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function CategoryPage({ params }: { params: Promise<{ slug: string[] }> }) {
   ensureDbReady();
   const { slug } = await params;
   const db = getDb();
 
-  const category = db.prepare('SELECT * FROM categories WHERE slug = ?').get(slug) as any;
-  if (!category) notFound();
+  const resolved = resolveCategory(slug);
+  if (!resolved) notFound();
+  if (resolved.type === 'redirect') redirect(resolved.redirect);
+
+  const { category, parent: parentCategory } = resolved;
 
   const subcategories = db.prepare(
     'SELECT id, name, slug, description, image FROM categories WHERE parent_id = ? ORDER BY sort_order'
   ).all(category.id) as any[];
+
+  // Build URL prefix for subcategory links
+  const subUrlPrefix = parentCategory
+    ? `/category/${parentCategory.slug}`
+    : `/category/${category.slug}`;
 
   // Get products in this category or its subcategories
   const products = db.prepare(`
@@ -42,10 +92,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
       AND p.status = 'published' AND p.deleted_at IS NULL
     ORDER BY p.is_featured DESC, p.created_at DESC
   `).all(category.id, category.id, category.id) as any[];
-
-  const parentCategory = category.parent_id
-    ? db.prepare('SELECT name, slug FROM categories WHERE id = ?').get(category.parent_id) as any
-    : null;
 
   // JSON-LD breadcrumb
   const breadcrumbItems = [
@@ -62,7 +108,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
       '@type': 'ListItem',
       position: i + 1,
       name: item.label,
-      ...(item.href ? { item: `https://alayainsider.com${item.href}` } : {}),
+      ...('href' in item && item.href ? { item: `https://alayainsider.com${item.href}` } : {}),
     })),
   };
 
@@ -88,7 +134,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             {subcategories.map((sub: any) => (
               <Link
                 key={sub.id}
-                href={`/category/${sub.slug}`}
+                href={`${subUrlPrefix}/${sub.slug}`}
                 className="group block rounded-lg overflow-hidden border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all"
               >
                 <div className="aspect-[4/3] bg-ivory overflow-hidden">
@@ -136,7 +182,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             <h2 className="text-base font-semibold text-accent">
               {subcategories.length > 0 ? 'All Products' : `${category.name} Products`}
             </h2>
-            <span className="text-xs text-gray-400">{products.length} find{products.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {products.map((p: any) => (

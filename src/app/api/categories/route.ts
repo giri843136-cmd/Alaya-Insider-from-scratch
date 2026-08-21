@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   const categories = db.prepare(`
     SELECT c.*,
-      (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.status = 'published' AND p.deleted_at IS NULL) as product_count,
+      (SELECT COUNT(*) FROM products p WHERE (p.category_id = c.id OR p.subcategory_id = c.id) AND p.status = 'published' AND p.deleted_at IS NULL) as product_count,
       pc.name as parent_name
     FROM categories c
     LEFT JOIN categories pc ON c.parent_id = pc.id

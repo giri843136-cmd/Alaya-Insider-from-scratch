@@ -41,7 +41,7 @@ const LAYOUTS = [
 function SubcategoryTile({ sub, parentSlug }: { sub: Subcategory; parentSlug: string }) {
   return (
     <Link
-      href={`/category/${sub.slug}`}
+      href={`/category/${parentSlug}/${sub.slug}`}
       className={styles.subTile}
     >
       <div className={styles.subTileImage}>
