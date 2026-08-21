@@ -1,0 +1,385 @@
+/* ============================================
+   Hero Carousel — Composition-based layout
+   ============================================ */
+
+.carousel {
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ---- Viewport ---- */
+.viewport {
+  position: relative;
+  height: clamp(300px, 32vw, 400px);
+}
+
+@media (max-width: 640px) {
+  .viewport {
+    height: clamp(280px, 70vw, 360px);
+  }
+}
+
+/* ---- Slides ---- */
+.slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  z-index: 0;
+  transition-property: opacity;
+  transition-timing-function: ease-in-out;
+}
+
+.slideActive {
+  opacity: 1;
+  z-index: 1;
+}
+
+.slideImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---- Content layer ---- */
+.contentLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  /* Safe zone: arrow max right edge = left 24px + width 42px = 66px, plus 14px gap = 80px */
+  padding: 0 clamp(68px, 7vw, 108px);
+}
+
+.content {
+  max-width: 580px;
+  display: flex;
+  flex-direction: column;
+}
+
+.contentRight {
+  margin-left: auto;
+  text-align: right;
+}
+
+.contentCenter {
+  margin: 0 auto;
+  text-align: center;
+}
+
+/* ---- Eyebrow ---- */
+.eyebrow {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--warm, #8b7e74);
+  margin-bottom: 10px;
+}
+
+.eyebrowLight {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* ---- Headline ---- */
+.headline {
+  font-size: clamp(1.625rem, 2.5vw + 0.5rem, 2.75rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--accent, #2d2b3d);
+  margin: 0;
+}
+
+.headlineLight {
+  color: #fff;
+}
+
+/* ---- Description ---- */
+.description {
+  font-size: clamp(0.875rem, 0.4vw + 0.75rem, 1rem);
+  line-height: 1.55;
+  color: #6b7280;
+  max-width: 480px;
+  margin: 14px 0 0;
+}
+
+.descriptionLight {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.contentRight .description {
+  margin-left: auto;
+}
+
+.contentCenter .description {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- CTA Group ---- */
+.ctaGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+.ctaGroupRight {
+  justify-content: flex-end;
+}
+
+.ctaGroupCenter {
+  justify-content: center;
+}
+
+/* ---- CTA Buttons ---- */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 46px;
+  padding: 0 24px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  line-height: 1;
+}
+
+.ctaPrimary {
+  background-color: var(--accent, #2d2b3d);
+  color: #fff;
+}
+
+.ctaPrimary:hover {
+  background-color: var(--accent-light, #3d3a50);
+}
+
+.ctaPrimaryLight {
+  background-color: #fff;
+  color: var(--accent, #2d2b3d);
+}
+
+.ctaPrimaryLight:hover {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.ctaSecondary {
+  background: transparent;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+}
+
+.ctaSecondary:hover {
+  border-color: var(--accent, #2d2b3d);
+  color: var(--accent, #2d2b3d);
+}
+
+.ctaSecondaryLight {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+  background: transparent;
+}
+
+.ctaSecondaryLight:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---- Arrows ---- */
+.arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b5563;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease;
+  padding: 0;
+}
+
+.arrow:hover {
+  background: #fff;
+  color: var(--accent, #2d2b3d);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.arrow:focus-visible {
+  outline: 2px solid var(--accent, #2d2b3d);
+  outline-offset: 2px;
+}
+
+.arrowPrev {
+  left: 14px;
+}
+
+.arrowNext {
+  right: 14px;
+}
+
+@media (min-width: 768px) {
+  .arrowPrev {
+    left: 20px;
+  }
+  .arrowNext {
+    right: 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .arrowPrev {
+    left: 24px;
+  }
+  .arrowNext {
+    right: 24px;
+  }
+}
+
+/* ---- Dots ---- */
+.dots {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 0;
+  cursor: pointer;
+  transition: all 250ms ease;
+}
+
+.dotActive {
+  width: 22px;
+  border-radius: 4px;
+  background: var(--accent, #2d2b3d);
+}
+
+.dot:hover:not(.dotActive) {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dot:focus-visible {
+  outline: 2px solid var(--accent, #2d2b3d);
+  outline-offset: 2px;
+}
+
+/* ---- Responsive: Small mobile (≤480px) ---- */
+@media (max-width: 480px) {
+  .viewport {
+    height: clamp(300px, 80vw, 380px);
+  }
+
+  .contentLayer {
+    /* Content starts below the arrow zone: arrow left 8px + width 34px = 42px, plus 6px gap = 48px */
+    padding: 0 16px;
+    align-items: center;
+  }
+
+  .content {
+    /* Push content to center, away from arrows */
+    padding: 0 28px;
+  }
+
+  .headline {
+    font-size: 1.375rem;
+  }
+
+  .description {
+    font-size: 0.8125rem;
+    margin-top: 8px;
+  }
+
+  .ctaGroup {
+    margin-top: 14px;
+    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cta {
+    height: 42px;
+    padding: 0 16px;
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .arrow {
+    width: 34px;
+    height: 34px;
+  }
+
+  .arrowPrev {
+    left: 8px;
+  }
+
+  .arrowNext {
+    right: 8px;
+  }
+
+  .arrow svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+/* ---- Small-to-medium mobile (481–640px) ---- */
+@media (min-width: 481px) and (max-width: 640px) {
+  .contentLayer {
+    padding: 0 52px;
+  }
+
+  .headline {
+    font-size: 1.625rem;
+  }
+
+  .arrow {
+    width: 38px;
+    height: 38px;
+  }
+
+  .arrowPrev {
+    left: 10px;
+  }
+
+  .arrowNext {
+    right: 10px;
+  }
+}
+
+/* ---- Tablet portrait (641–767px) ---- */
+@media (min-width: 641px) and (max-width: 767px) {
+  .contentLayer {
+    /* Arrow: left 14px + width 42px = 56px right edge. Add 12px gap = 68px */
+    padding: 0 68px;
+  }
+}
