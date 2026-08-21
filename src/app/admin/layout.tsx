@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
-import { AuthContext } from '@/lib/admin-auth-context';
+import { AuthContext, storeAuthToken, getAuthToken, clearAuthToken } from '@/lib/admin-auth-context';
 
 interface AuthUser {
   id: string; email: string; username: string; first_name: string; last_name: string; role_name: string;
@@ -37,9 +37,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
 
-  // Check auth once on mount — trust localStorage token
+  // Check auth once on mount — trust stored token (localStorage or memory)
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const token = getAuthToken();
 
     // No token → show login
     if (!token) {
@@ -75,14 +75,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const logout = async () => {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
     } catch {}
-    localStorage.removeItem('auth_token');
+    clearAuthToken();
     setUser(null);
     setView('login');
     window.history.pushState({}, '', '/admin/login');
@@ -189,7 +189,7 @@ function LoginForm({ onSuccess }: { onSuccess: (user: AuthUser) => void }) {
       const data = await res.json();
 
       if (res.ok && data.token && data.user) {
-        localStorage.setItem('auth_token', data.token);
+        storeAuthToken(data.token);
         onSuccess(data.user);
       } else {
         setError(data.error || 'Login failed');
