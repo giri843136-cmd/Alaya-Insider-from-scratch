@@ -129,7 +129,7 @@ export default function HomePage() {
                   className="group bg-ivory rounded-lg p-6 border border-transparent hover:border-gray-200 hover:shadow-md transition-all">
                   <h3 className="text-base font-semibold text-accent group-hover:text-plum">{c.name}</h3>
                   <p className="text-sm text-gray-500 mt-2 line-clamp-2">{c.description}</p>
-                  <span className="text-xs text-warm mt-3 inline-block">{c.product_count} products →</span>
+                  <span className="text-xs text-warm mt-3 inline-block">Explore collection →</span>
                 </Link>
               ))}
             </div>
