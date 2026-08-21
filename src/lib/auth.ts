@@ -58,14 +58,24 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     }
 
     if (!token) {
-      const cookieStore = await cookies();
-      token = cookieStore.get('auth_token')?.value;
+      try {
+        const cookieStore = await cookies();
+        token = cookieStore.get('auth_token')?.value;
+      } catch {
+        // cookies() can throw in certain Next.js contexts — that's OK
+      }
     }
 
-    if (!token) return null;
+    if (!token) {
+      console.log('AUTH_DEBUG: no_token_found auth_header_present=' + !!authHeader);
+      return null;
+    }
 
     const decoded = verifyToken(token);
-    if (!decoded) return null;
+    if (!decoded) {
+      console.log('AUTH_DEBUG: token_verify_failed token_length=' + token.length);
+      return null;
+    }
 
     const db = getDb();
     const user = db.prepare(`
@@ -75,7 +85,10 @@ export async function getAuthUser(): Promise<AuthUser | null> {
       WHERE u.id = ? AND u.is_active = 1
     `).get(decoded.id) as any;
 
-    if (!user) return null;
+    if (!user) {
+      console.log('AUTH_DEBUG: user_not_found id=' + decoded.id);
+      return null;
+    }
 
     return {
       id: user.id,
@@ -87,7 +100,8 @@ export async function getAuthUser(): Promise<AuthUser | null> {
       role_name: user.role_name,
       permissions: JSON.parse(user.role_permissions || '{}'),
     };
-  } catch {
+  } catch (e) {
+    console.error('AUTH_DEBUG: getAuthUser exception', e instanceof Error ? e.message : e);
     return null;
   }
 }

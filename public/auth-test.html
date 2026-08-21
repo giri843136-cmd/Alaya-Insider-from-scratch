@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Auth Debug — Alaya Insider</title>
+<style>
+  body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+  .log { background: white; padding: 16px; border-radius: 8px; margin: 10px 0; border: 1px solid #ddd; white-space: pre-wrap; }
+  button { padding: 8px 16px; margin: 4px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; }
+  .ok { color: green; } .fail { color: red; }
+  h2 { margin-top: 24px; }
+</style>
+</head>
+<body>
+<h1>Alaya Insider — Auth Debug</h1>
+<p>This page tests the exact same auth flow as the Admin Panel.</p>
+
+<h2>Step 1: Login</h2>
+<button onclick="doLogin()">Login as Admin</button>
+<div id="loginResult" class="log">Click Login to start</div>
+
+<h2>Step 2: Check Token Storage</h2>
+<button onclick="checkStorage()">Check Storage</button>
+<div id="storageResult" class="log">—</div>
+
+<h2>Step 3: Test /api/auth/me</h2>
+<button onclick="testMe()">Call /me</button>
+<div id="meResult" class="log">—</div>
+
+<h2>Step 4: Test Brand Save</h2>
+<button onclick="testBrandSave()">Save Brand</button>
+<div id="brandResult" class="log">—</div>
+
+<h2>Step 5: Test Product Save</h2>
+<button onclick="testProductSave()">Save Product</button>
+<div id="productResult" class="log">—</div>
+
+<h2>Step 6: Cleanup</h2>
+<button onclick="cleanup()">Delete Test Data</button>
+<div id="cleanupResult" class="log">—</div>
+
+<script>
+let memoryToken = null;
+let testBrandId = null;
+let testProductId = null;
+
+function storeToken(t) {
+  memoryToken = t;
+  try { localStorage.setItem('auth_token', t); } catch(e) { log('loginResult', 'localStorage.setItem FAILED: ' + e.message, 'fail'); }
+}
+
+function getToken() {
+  try {
+    const ls = localStorage.getItem('auth_token');
+    if (ls) { memoryToken = ls; return ls; }
+  } catch(e) {}
+  return memoryToken;
+}
+
+function log(id, msg, cls) {
+  document.getElementById(id).innerHTML += '\n' + (cls ? `<span class="${cls}">${msg}</span>` : msg);
+}
+
+async function doLogin() {
+  const el = document.getElementById('loginResult');
+  el.innerHTML = 'Logging in...';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'admin@alayainsider.com', password: '((Alaya)1923@+-)' })
+    });
+    const data = await res.json();
+    log('loginResult', `HTTP ${res.status}`, res.ok ? 'ok' : 'fail');
+    log('loginResult', `Has token: ${!!data.token}`, data.token ? 'ok' : 'fail');
+    log('loginResult', `Token length: ${(data.token||'').length}`);
+    log('loginResult', `Has user: ${!!data.user}`, data.user ? 'ok' : 'fail');
+    if (data.user) log('loginResult', `User: ${data.user.email} (${data.user.role_name})`);
+    if (data.token) {
+      storeToken(data.token);
+      log('loginResult', 'Token stored via storeToken()', 'ok');
+    }
+  } catch(e) {
+    log('loginResult', 'NETWORK ERROR: ' + e.message, 'fail');
+  }
+}
+
+function checkStorage() {
+  const el = document.getElementById('storageResult');
+  el.innerHTML = '';
+  // localStorage
+  try {
+    const ls = localStorage.getItem('auth_token');
+    log('storageResult', `localStorage['auth_token']: ${ls ? 'EXISTS (len=' + ls.length + ')' : 'NULL/EMPTY'}`, ls ? 'ok' : 'fail');
+  } catch(e) {
+    log('storageResult', `localStorage ERROR: ${e.message}`, 'fail');
+  }
+  // Memory
+  log('storageResult', `memoryToken: ${memoryToken ? 'EXISTS (len=' + memoryToken.length + ')' : 'NULL'}`, memoryToken ? 'ok' : 'fail');
+  // getToken
+  const t = getToken();
+  log('storageResult', `getToken(): ${t ? 'EXISTS (len=' + t.length + ')' : 'NULL'}`, t ? 'ok' : 'fail');
+}
+
+async function testMe() {
+  const el = document.getElementById('meResult');
+  el.innerHTML = 'Calling /api/auth/me...';
+  const token = getToken();
+  log('meResult', `Token for request: ${token ? 'present (len=' + token.length + ')' : 'MISSING'}`, token ? 'ok' : 'fail');
+  try {
+    const res = await fetch('/api/auth/me', {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    });
+    const data = await res.json();
+    log('meResult', `HTTP ${res.status}`, res.ok ? 'ok' : 'fail');
+    if (data.user) {
+      log('meResult', `Authenticated: ${data.user.email} (${data.user.role_name})`, 'ok');
+    } else {
+      log('meResult', `NOT authenticated: ${JSON.stringify(data)}`, 'fail');
+    }
+  } catch(e) {
+    log('meResult', 'NETWORK ERROR: ' + e.message, 'fail');
+  }
+}
+
+async function testBrandSave() {
+  const el = document.getElementById('brandResult');
+  el.innerHTML = 'Creating brand...';
+  const token = getToken();
+  log('brandResult', `Token: ${token ? 'present' : 'MISSING'}`, token ? 'ok' : 'fail');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  log('brandResult', `Auth header: ${headers['Authorization'] ? 'SET' : 'NOT SET'}`, headers['Authorization'] ? 'ok' : 'fail');
+  try {
+    const res = await fetch('/api/brands', {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'QA-AUTH-DEBUG-BRAND', slug: 'qa-auth-debug-brand', description: 'Debug test' })
+    });
+    log('brandResult', `HTTP ${res.status}`, res.ok ? 'ok' : 'fail');
+    if (res.ok) {
+      const data = await res.json();
+      testBrandId = data.id;
+      log('brandResult', `Brand created: ${data.id}`, 'ok');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      log('brandResult', `Error: ${JSON.stringify(data)}`, 'fail');
+    }
+  } catch(e) {
+    log('brandResult', 'NETWORK ERROR: ' + e.message, 'fail');
+  }
+}
+
+async function testProductSave() {
+  const el = document.getElementById('productResult');
+  el.innerHTML = 'Creating product...';
+  const token = getToken();
+  log('productResult', `Token: ${token ? 'present' : 'MISSING'}`, token ? 'ok' : 'fail');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  try {
+    const res = await fetch('/api/products', {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'QA-AUTH-DEBUG-PRODUCT', slug: 'qa-auth-debug-product', status: 'draft', current_price: 10 })
+    });
+    log('productResult', `HTTP ${res.status}`, res.ok ? 'ok' : 'fail');
+    if (res.ok) {
+      const data = await res.json();
+      testProductId = data.id;
+      log('productResult', `Product created: ${data.id}`, 'ok');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      log('productResult', `Error: ${JSON.stringify(data)}`, 'fail');
+    }
+  } catch(e) {
+    log('productResult', 'NETWORK ERROR: ' + e.message, 'fail');
+  }
+}
+
+async function cleanup() {
+  const el = document.getElementById('cleanupResult');
+  el.innerHTML = 'Cleaning up...';
+  const token = getToken();
+  const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+  if (testBrandId) {
+    await fetch('/api/brands/' + testBrandId, { method: 'DELETE', headers });
+    log('cleanupResult', 'Brand deleted', 'ok');
+  }
+  if (testProductId) {
+    await fetch('/api/products/' + testProductId, { method: 'DELETE', headers });
+    log('cleanupResult', 'Product deleted', 'ok');
+  }
+  log('cleanupResult', 'Done');
+}
+</script>
+</body>
+</html>
