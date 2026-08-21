@@ -104,7 +104,9 @@ export default function HeroCarousel({ slides, autoplay = true, interval = 5000,
                 loading={i === 0 ? 'eager' : 'lazy'}
                 fetchPriority={i === 0 ? 'high' : undefined} />
             )}
-            <div className="relative z-10 h-full max-w-content mx-auto px-6 sm:px-10 flex items-center">
+            {/* Content area — inset horizontally to create safe zone for arrows */}
+            <div className="relative z-10 h-full flex items-center"
+              style={{ padding: '0 clamp(60px, 7vw, 100px)' }}>
               <div className={`max-w-lg ${s.layout === 'text-right' ? 'ml-auto text-right' : s.layout === 'text-center' ? 'mx-auto text-center' : ''}`}>
                 {s.eyebrow && (
                   <span className={`text-[10px] sm:text-xs font-semibold uppercase tracking-[0.2em] ${isDark ? 'text-white/60' : 'text-warm'}`}>{s.eyebrow}</span>
@@ -113,18 +115,23 @@ export default function HeroCarousel({ slides, autoplay = true, interval = 5000,
                   <h2 className={`text-2xl sm:text-3xl lg:text-4xl font-semibold leading-tight mt-2 ${isDark ? 'text-white' : 'text-accent'}`}>{s.headline}</h2>
                 )}
                 {s.description && (
-                  <p className={`text-sm sm:text-base mt-3 leading-relaxed max-w-md ${isDark ? 'text-white/70' : 'text-gray-500'} ${s.layout === 'text-right' ? 'ml-auto' : s.layout === 'text-center' ? 'mx-auto' : ''}`}>{s.description}</p>
+                  <p className={`text-sm sm:text-base mt-3 leading-relaxed ${isDark ? 'text-white/70' : 'text-gray-500'} ${s.layout === 'text-right' ? 'ml-auto' : s.layout === 'text-center' ? 'mx-auto' : ''}`}
+                    style={{ maxWidth: '520px' }}>
+                    {s.description}
+                  </p>
                 )}
                 <div className={`flex gap-3 mt-5 flex-wrap ${s.layout === 'text-right' ? 'justify-end' : s.layout === 'text-center' ? 'justify-center' : ''}`}>
                   {s.primary_cta_label && s.primary_cta_url && (
                     <Link href={s.primary_cta_url}
-                      className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-colors ${isDark ? 'bg-white text-accent hover:bg-white/90' : 'bg-accent text-white hover:bg-accent-light'}`}>
+                      className={`inline-flex items-center justify-center px-6 text-sm font-medium rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${isDark ? 'bg-white text-accent hover:bg-white/90' : 'bg-accent text-white hover:bg-accent-light'}`}
+                      style={{ height: '48px', minWidth: '180px' }}>
                       {s.primary_cta_label}
                     </Link>
                   )}
                   {s.secondary_cta_label && s.secondary_cta_url && (
                     <Link href={s.secondary_cta_url}
-                      className={`px-6 py-2.5 text-sm font-medium rounded-lg border transition-colors ${isDark ? 'border-white/30 text-white hover:bg-white/10' : 'border-gray-300 text-gray-600 hover:border-accent hover:text-accent'}`}>
+                      className={`inline-flex items-center justify-center px-6 text-sm font-medium rounded-lg border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${isDark ? 'border-white/30 text-white hover:bg-white/10' : 'border-gray-300 text-gray-600 hover:border-accent hover:text-accent'}`}
+                      style={{ height: '48px', minWidth: '190px' }}>
                       {s.secondary_cta_label}
                     </Link>
                   )}
@@ -135,27 +142,33 @@ export default function HeroCarousel({ slides, autoplay = true, interval = 5000,
         ))}
       </div>
 
+      {/* Navigation arrows — positioned in safe zones outside content area */}
       {total > 1 && (
         <>
           <button onClick={prev} aria-label="Previous slide"
-            className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-white/50 flex items-center justify-center text-gray-600 hover:bg-white hover:text-accent transition-all"
-            style={{ opacity: 0.7 }}>
-            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center rounded-full bg-white/80 backdrop-blur-sm border border-white/50 text-gray-600 hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 transition-all"
+            style={{ left: 'clamp(12px, 2vw, 28px)', width: '44px', height: '44px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
           <button onClick={next} aria-label="Next slide"
-            className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-white/50 flex items-center justify-center text-gray-600 hover:bg-white hover:text-accent transition-all"
-            style={{ opacity: 0.7 }}>
-            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center rounded-full bg-white/80 backdrop-blur-sm border border-white/50 text-gray-600 hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 transition-all"
+            style={{ right: 'clamp(12px, 2vw, 28px)', width: '44px', height: '44px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </>
       )}
 
+      {/* Dot indicators */}
       {total > 1 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2" role="tablist" aria-label="Slide navigation">
           {slides.map((s, i) => (
             <button key={s.id} role="tab" aria-selected={i === current} aria-label={`Go to slide ${i + 1}`}
               onClick={() => goTo(i)}
-              className={`rounded-full transition-all duration-300 ${i === current ? 'w-6 h-2 bg-accent' : 'w-2 h-2 bg-gray-400/40 hover:bg-gray-400/70'}`} />
+              className={`rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${i === current ? 'w-6 h-2 bg-accent' : 'w-2 h-2 bg-gray-400/40 hover:bg-gray-400/70'}`} />
           ))}
         </div>
       )}
