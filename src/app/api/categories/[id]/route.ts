@@ -31,13 +31,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const data = await req.json();
   const db = getDb();
 
+  // Prevent setting self as parent
+  if (data.parent_id === id) {
+    return NextResponse.json({ error: 'Category cannot be its own parent' }, { status: 400 });
+  }
+
+  // Check for duplicate slug (exclude self)
+  if (data.slug) {
+    const existing = db.prepare('SELECT id FROM categories WHERE slug = ? AND id != ?').get(data.slug, id) as any;
+    if (existing) {
+      return NextResponse.json({ error: 'Category slug already exists' }, { status: 400 });
+    }
+  }
+
   db.prepare(`
     UPDATE categories SET name = ?, slug = ?, description = ?, image = ?,
       parent_id = ?, sort_order = ?, is_featured = ?, seo_title = ?, seo_description = ?,
       updated_at = datetime('now')
     WHERE id = ?
   `).run(data.name, data.slug, data.description || '', data.image || '',
-    data.parent_id || null, data.sort_order || 0, data.is_featured ? 1 : 0,
+    data.parent_id || null, data.sort_order ?? 0, data.is_featured ? 1 : 0,
     data.seo_title || '', data.seo_description || '', id);
 
   return NextResponse.json({ success: true });
@@ -50,6 +63,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { id } = await params;
   const db = getDb();
+
+  // Move children to top-level before deleting
+  db.prepare('UPDATE categories SET parent_id = NULL WHERE parent_id = ?').run(id);
+
+  // Unassign products from this category
+  db.prepare('UPDATE products SET category_id = NULL WHERE category_id = ?').run(id);
+  db.prepare('UPDATE products SET subcategory_id = NULL WHERE subcategory_id = ?').run(id);
+
+  // Delete the category
   db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+
   return NextResponse.json({ success: true });
 }

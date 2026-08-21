@@ -8,23 +8,59 @@ export function seedDemoData() {
   // Categories
   const categories: Record<string, string> = {};
   const catData = [
-    { name: 'Fashion', slug: 'fashion', desc: 'Curated fashion picks', featured: 1, children: [
-      { name: 'Dresses', slug: 'dresses' }, { name: 'Shoes', slug: 'shoes' }, { name: 'Bags', slug: 'bags' }, { name: 'Accessories', slug: 'accessories' },
+    { name: 'Fashion', slug: 'fashion', desc: 'Easy pieces, polished essentials and everyday styles worth discovering.', featured: 1, children: [
+      { name: 'Dresses', slug: 'dresses', desc: 'From day to evening' },
+      { name: 'Tops', slug: 'tops', desc: 'Everyday layers' },
+      { name: 'Co-ords', slug: 'co-ords', desc: 'Effortless sets' },
+      { name: 'Workwear', slug: 'workwear', desc: 'Office-ready pieces' },
+      { name: 'Shoes', slug: 'shoes', desc: 'Steps worth taking' },
+      { name: 'Bags', slug: 'bags', desc: 'Carry it well' },
+      { name: 'Accessories', slug: 'accessories', desc: 'Finishing touches' },
     ]},
-    { name: 'Home', slug: 'home', desc: 'Everything for your home', featured: 1, children: [
-      { name: 'Kitchen', slug: 'kitchen' }, { name: 'Bedroom', slug: 'bedroom' }, { name: 'Decor', slug: 'decor' }, { name: 'Lighting', slug: 'lighting' },
+    { name: 'Home', slug: 'home', desc: 'Thoughtful pieces for spaces that feel more like you.', featured: 1, children: [
+      { name: 'Living Room', slug: 'living-room', desc: 'Where life happens' },
+      { name: 'Bedroom', slug: 'bedroom', desc: 'Rest well' },
+      { name: 'Kitchen', slug: 'kitchen', desc: 'Cook with intention' },
+      { name: 'Decor', slug: 'decor', desc: 'Details that matter' },
+      { name: 'Lighting', slug: 'lighting', desc: 'Set the mood' },
+      { name: 'Organization', slug: 'organization', desc: 'Everything in place' },
+      { name: 'Furniture', slug: 'furniture', desc: 'Built to last' },
     ]},
-    { name: 'Beauty', slug: 'beauty', desc: 'Skincare, haircare, and more', featured: 1, children: [
-      { name: 'Skincare', slug: 'skincare' }, { name: 'Haircare', slug: 'haircare' }, { name: 'Makeup', slug: 'makeup' },
+    { name: 'Beauty', slug: 'beauty', desc: 'Simple additions for better everyday routines.', featured: 1, children: [
+      { name: 'Skincare', slug: 'skincare', desc: 'Healthy foundations' },
+      { name: 'Makeup', slug: 'makeup', desc: 'Enhance naturally' },
+      { name: 'Haircare', slug: 'haircare', desc: 'Better hair days' },
+      { name: 'Body Care', slug: 'body-care', desc: 'Head to toe' },
+      { name: 'Fragrance', slug: 'fragrance', desc: 'Signature scents' },
+      { name: 'Beauty Tools', slug: 'beauty-tools', desc: 'Professional grade' },
+      { name: 'Wellness', slug: 'beauty-wellness', desc: 'Feel your best' },
     ]},
-    { name: 'Electronics', slug: 'electronics', desc: 'Smart tech and gadgets', featured: 1, children: [
-      { name: 'Audio', slug: 'audio' }, { name: 'Smart Home', slug: 'smart-home' }, { name: 'Tech Accessories', slug: 'tech-accessories' },
+    { name: 'Electronics', slug: 'electronics', desc: 'Useful technology, selected without the noise.', featured: 1, children: [
+      { name: 'Headphones', slug: 'headphones', desc: 'Your sound, perfected' },
+      { name: 'Smart Home', slug: 'smart-home', desc: 'Live smarter' },
+      { name: 'Computers', slug: 'computers', desc: 'Power your work' },
+      { name: 'Phone Accessories', slug: 'phone-accessories', desc: 'Better connected' },
+      { name: 'Wearables', slug: 'wearables', desc: 'Tech you wear' },
+      { name: 'Home Tech', slug: 'home-tech', desc: 'Upgrade your space' },
+      { name: 'Audio', slug: 'audio', desc: 'Premium listening' },
     ]},
-    { name: 'Travel', slug: 'travel', desc: 'Travel essentials', featured: 1, children: [
-      { name: 'Luggage', slug: 'luggage' }, { name: 'Travel Accessories', slug: 'travel-accessories' },
+    { name: 'Travel', slug: 'travel', desc: 'Smart essentials for easier journeys.', featured: 1, children: [
+      { name: 'Luggage', slug: 'luggage', desc: 'Travel with confidence' },
+      { name: 'Carry-On', slug: 'carry-on', desc: 'Cabin-ready' },
+      { name: 'Travel Bags', slug: 'travel-bags', desc: 'Beyond the suitcase' },
+      { name: 'Travel Accessories', slug: 'travel-accessories', desc: 'Small but essential' },
+      { name: 'Packing', slug: 'packing', desc: 'Pack smarter' },
+      { name: 'Travel Tech', slug: 'travel-tech', desc: 'Stay connected' },
+      { name: 'Weekend Essentials', slug: 'weekend-essentials', desc: 'Quick getaway' },
     ]},
-    { name: 'Lifestyle', slug: 'lifestyle', desc: 'Wellness and lifestyle', featured: 1, children: [
-      { name: 'Fitness', slug: 'fitness' }, { name: 'Wellness', slug: 'wellness' },
+    { name: 'Lifestyle', slug: 'lifestyle', desc: 'Curated finds for everyday living.', featured: 1, children: [
+      { name: 'Wellness', slug: 'lifestyle-wellness', desc: 'Mind and body' },
+      { name: 'Fitness', slug: 'fitness', desc: 'Move well' },
+      { name: 'Everyday Essentials', slug: 'everyday-essentials', desc: 'Daily upgrades' },
+      { name: 'Desk & Office', slug: 'desk-office', desc: 'Work better' },
+      { name: 'Gifts', slug: 'gifts', desc: 'Give thoughtfully' },
+      { name: 'Self Care', slug: 'self-care', desc: 'Take a moment' },
+      { name: 'Outdoor Living', slug: 'outdoor-living', desc: 'Step outside' },
     ]},
   ];
   const catStmt = db.prepare('INSERT INTO categories (id, name, slug, description, parent_id, is_featured, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -32,7 +68,8 @@ export function seedDemoData() {
   for (const cat of catData) {
     const pid = uuid(); categories[cat.slug] = pid;
     catStmt.run(pid, cat.name, cat.slug, cat.desc, null, cat.featured, catOrder++);
-    for (const ch of cat.children) { const cid = uuid(); categories[ch.slug] = cid; catStmt.run(cid, ch.name, ch.slug, '', pid, 0, catOrder++); }
+    let subOrder = 0;
+    for (const ch of cat.children) { const cid = uuid(); categories[ch.slug] = cid; catStmt.run(cid, ch.name, ch.slug, ch.desc || '', pid, 0, subOrder++); }
   }
 
   // Brands
