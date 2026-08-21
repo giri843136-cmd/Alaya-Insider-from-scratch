@@ -21,15 +21,28 @@ export default function AdminBrands() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const handleSave = async () => {
-    if (!editing?.name) return;
+    if (!editing?.name) { showToast('Brand name is required'); return; }
     const slug = editing.slug || slugify(editing.name, { lower: true, strict: true });
     const method = editing.id ? 'PUT' : 'POST';
     const url = editing.id ? `/api/brands/${editing.id}` : '/api/brands';
-    const res = await fetch(url, {
-      method, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...editing, slug }),
-    });
-    if (res.ok) { showToast('Brand saved'); setEditing(null); fetchBrands(); }
+    try {
+      const res = await adminFetch(url, {
+        method,
+        body: JSON.stringify({ ...editing, slug }),
+      });
+      if (res.ok) {
+        showToast(editing.id ? 'Brand updated' : 'Brand created');
+        setEditing(null);
+        fetchBrands();
+      } else if (res.status === 401) {
+        showToast('Session expired — please sign in again');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Save failed — please try again');
+      }
+    } catch {
+      showToast('Unable to save — check your connection');
+    }
   };
 
   const handleDelete = async (id: string) => {

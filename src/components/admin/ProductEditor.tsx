@@ -108,11 +108,13 @@ export default function ProductEditor({ productId }: Props) {
         setPublishErrors(data.blockers);
         setShowPublishModal(true);
         showToast('Cannot publish — missing required fields');
+      } else if (res.status === 401) {
+        showToast('Session expired — please sign in again');
       } else {
-        showToast(data.error || 'Save failed');
+        showToast(data.error || 'Save failed — please try again');
       }
     } catch {
-      showToast('Save failed');
+      showToast('Unable to save — check your connection');
     }
     setSaving(false);
   };
