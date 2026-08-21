@@ -16,10 +16,31 @@ async function getProduct(slug: string) {
     FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN categories sc ON p.subcategory_id = sc.id
     WHERE p.slug = ? AND p.deleted_at IS NULL`).get(slug) as any;
   if (!product) return null;
+
+  // Safely parse JSON fields — handles double-stringified data
+  const safeParse = (val: any, fallback: any = []) => {
+    if (Array.isArray(val)) return val;
+    if (typeof val !== 'string' || !val) return fallback;
+    try {
+      const parsed = JSON.parse(val);
+      if (typeof parsed === 'string') {
+        try { return JSON.parse(parsed); } catch { return fallback; }
+      }
+      return parsed;
+    } catch { return fallback; }
+  };
+
   const related = db.prepare(`SELECT p.*, b.name as brand_name, c.name as category_name FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id
     WHERE p.category_id = ? AND p.id != ? AND p.status = 'published' AND p.deleted_at IS NULL LIMIT 4`).all(product.category_id, product.id);
   return {
-    product: { ...product, benefits: JSON.parse(product.benefits || '[]'), pros: JSON.parse(product.pros || '[]'), cons: JSON.parse(product.cons || '[]'), tags: JSON.parse(product.tags || '[]'), specifications: JSON.parse(product.specifications || '{}') },
+    product: {
+      ...product,
+      benefits: safeParse(product.benefits),
+      pros: safeParse(product.pros),
+      cons: safeParse(product.cons),
+      tags: safeParse(product.tags),
+      specifications: safeParse(product.specifications, {}),
+    },
     related,
   };
 }
