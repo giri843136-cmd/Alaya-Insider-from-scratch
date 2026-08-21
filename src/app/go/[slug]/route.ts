@@ -9,8 +9,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const destination = new URL(req.url).searchParams.get('destination') || 'global';
   const db = getDb();
 
-  // Try product slug
-  const product = db.prepare("SELECT * FROM products WHERE slug = ? AND deleted_at IS NULL").get(slug) as any;
+  // Try product slug — only published products may generate affiliate traffic
+  const product = db.prepare("SELECT * FROM products WHERE slug = ? AND status = 'published' AND deleted_at IS NULL").get(slug) as any;
   if (product) {
     const ua = req.headers.get('user-agent') || '';
     const device = /mobile/i.test(ua) ? 'mobile' : /tablet/i.test(ua) ? 'tablet' : 'desktop';

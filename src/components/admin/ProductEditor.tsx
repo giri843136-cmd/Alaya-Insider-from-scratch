@@ -30,6 +30,8 @@ export default function ProductEditor({ productId }: Props) {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [activeTab, setActiveTab] = useState('basic');
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishErrors, setPublishErrors] = useState<string[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -76,24 +78,36 @@ export default function ProductEditor({ productId }: Props) {
     setTimeout(() => setToast(''), 3000);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrideStatus?: string) => {
     if (!form.name) { showToast('Product name is required'); return; }
     setSaving(true);
 
     const slug = form.slug || slugify(form.name, { lower: true, strict: true });
-    const body = { ...form, slug, previous_price: form.previous_price || null };
+    const status = overrideStatus || form.status;
+    const body = { ...form, slug, status, previous_price: form.previous_price || null };
 
     try {
       const url = productId ? `/api/products/${productId}` : '/api/products';
       const method = productId ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await adminFetch(url, { method, body: JSON.stringify(body) });
       const data = await res.json();
 
       if (res.ok) {
-        showToast(productId ? 'Product saved' : 'Product created');
+        setForm(f => ({ ...f, status }));
+        if (status === 'published' && form.status !== 'published') {
+          showToast('Product published ✓');
+        } else {
+          showToast(productId ? 'Product saved' : 'Product created');
+        }
+        setShowPublishModal(false);
         if (!productId && data.id) {
           router.push(`/admin/products/${data.id}`);
         }
+      } else if (res.status === 422 && data.blockers) {
+        // Publish validation failed
+        setPublishErrors(data.blockers);
+        setShowPublishModal(true);
+        showToast('Cannot publish — missing required fields');
       } else {
         showToast(data.error || 'Save failed');
       }
@@ -101,6 +115,25 @@ export default function ProductEditor({ productId }: Props) {
       showToast('Save failed');
     }
     setSaving(false);
+  };
+
+  const handlePublishClick = () => {
+    // Client-side pre-check before sending to server
+    const blockers: string[] = [];
+    if (!form.name?.trim()) blockers.push('Product name is required');
+    if (!form.primary_image) blockers.push('Primary image is required');
+    if (!form.category_id) blockers.push('Category is required');
+    if (!form.brand_id) blockers.push('Brand is required');
+    if (!form.short_description) blockers.push('Description is required');
+    if (!form.why_we_recommend) blockers.push('Why We Recommend It is required');
+    if (!form.seo_title) blockers.push('SEO title is required');
+    if (!form.seo_description) blockers.push('Meta description is required');
+    const hasGlobal = form.global_active && form.global_affiliate_url;
+    const hasIndia = form.india_active && form.india_affiliate_url;
+    if (!hasGlobal && !hasIndia) blockers.push('At least one affiliate destination is required');
+
+    setPublishErrors(blockers);
+    setShowPublishModal(true);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,30 +191,123 @@ export default function ProductEditor({ productId }: Props) {
         </div>
       )}
 
+      {/* Publishing header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-        <h1 className="text-xl font-semibold text-gray-800">
-          {productId ? 'Edit Product' : 'New Product'}
-        </h1>
-        <div className="flex gap-2">
-          <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-            className="px-3 py-2 border border-gray-200 rounded-md text-sm bg-white">
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-            <option value="archived">Archived</option>
-            <option value="out_of_stock">Out of Stock</option>
-          </select>
-          <button onClick={handleSave} disabled={saving}
-            className="px-5 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-light transition-colors disabled:opacity-50">
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold text-gray-800">
+            {productId ? 'Edit Product' : 'New Product'}
+          </h1>
+          <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+            form.status === 'published' ? 'bg-green-50 text-green-700 border border-green-200' :
+            form.status === 'in_review' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+            form.status === 'ready' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+            form.status === 'archived' ? 'bg-gray-100 text-gray-500 border border-gray-200' :
+            'bg-amber-50 text-amber-700 border border-amber-200'
+          }`}>
+            {form.status === 'in_review' ? 'In Review' : form.status === 'ready' ? 'Ready' : form.status}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {/* Status workflow buttons */}
+          {form.status !== 'published' && (
+            <>
+              <button onClick={() => handleSave()} disabled={saving}
+                className="px-4 py-2 border border-gray-200 text-gray-600 text-sm rounded-md hover:border-gray-300 transition-colors disabled:opacity-50">
+                {saving ? 'Saving...' : 'Save Draft'}
+              </button>
+              {productId && (
+                <a href={`/product/${form.slug || slugify(form.name || '', { lower: true, strict: true })}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="px-4 py-2 border border-gray-200 text-gray-500 text-sm rounded-md hover:border-gray-300 transition-colors inline-flex items-center gap-1.5">
+                  Preview
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+                </a>
+              )}
+              <button onClick={handlePublishClick} disabled={saving}
+                className="px-5 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-light transition-colors disabled:opacity-50">
+                Publish
+              </button>
+            </>
+          )}
+          {form.status === 'published' && (
+            <>
+              <button onClick={() => handleSave()} disabled={saving}
+                className="px-5 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-light transition-colors disabled:opacity-50">
+                {saving ? 'Saving...' : 'Update'}
+              </button>
+              <button onClick={() => handleSave('draft')} disabled={saving}
+                className="px-4 py-2 border border-gray-200 text-gray-500 text-sm rounded-md hover:border-amber-300 hover:text-amber-600 transition-colors disabled:opacity-50">
+                Unpublish
+              </button>
+              <button onClick={() => handleSave('archived')} disabled={saving}
+                className="px-4 py-2 border border-gray-200 text-gray-400 text-sm rounded-md hover:border-red-200 hover:text-red-500 transition-colors disabled:opacity-50">
+                Archive
+              </button>
+            </>
+          )}
+          {form.status === 'archived' && (
+            <button onClick={() => handleSave('draft')} disabled={saving}
+              className="px-4 py-2 border border-gray-200 text-gray-500 text-sm rounded-md hover:border-accent transition-colors disabled:opacity-50">
+              Restore to Draft
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Publish checklist */}
-      {missingFields.length > 0 && form.status === 'published' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-md p-4 mb-6">
-          <p className="text-sm text-amber-800 font-medium">Missing recommended fields:</p>
-          <p className="text-sm text-amber-600 mt-1">{missingFields.join(', ')}</p>
+      {/* Publish readiness modal */}
+      {showPublishModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            {publishErrors.length === 0 ? (
+              <>
+                <h3 className="text-base font-semibold text-gray-800 mb-4">Ready to Publish?</h3>
+                <div className="space-y-2 mb-5">
+                  {[
+                    ['Product information', !!form.name],
+                    ['Brand', !!form.brand_id],
+                    ['Category', !!form.category_id],
+                    ['Primary image', !!form.primary_image],
+                    ['Affiliate destination', !!(form.global_active && form.global_affiliate_url) || !!(form.india_active && form.india_affiliate_url)],
+                    ['Description', !!form.short_description],
+                    ['Recommendation', !!form.why_we_recommend],
+                    ['SEO title', !!form.seo_title],
+                    ['Meta description', !!form.seo_description],
+                  ].map(([label, ok]) => (
+                    <div key={label as string} className="flex items-center gap-2 text-sm">
+                      <span className={ok ? 'text-green-500' : 'text-red-400'}>{ok ? '✅' : '❌'}</span>
+                      <span className={ok ? 'text-gray-700' : 'text-red-600'}>{label as string}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setShowPublishModal(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+                  <button onClick={() => handleSave('published')} disabled={saving}
+                    className="px-5 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-light transition-colors disabled:opacity-50">
+                    {saving ? 'Publishing...' : 'Publish Product'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-semibold text-red-700 mb-4">Cannot Publish Yet</h3>
+                <div className="space-y-2 mb-5">
+                  {publishErrors.map((err, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <span className="text-red-400">❌</span>
+                      <span className="text-red-600">{err}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setShowPublishModal(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Close</button>
+                  <button onClick={() => { setShowPublishModal(false); setActiveTab('basic'); }}
+                    className="px-4 py-2 bg-accent text-white text-sm rounded-md hover:bg-accent-light transition-colors">
+                    Fix Now
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

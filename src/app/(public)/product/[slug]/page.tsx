@@ -14,7 +14,7 @@ async function getProduct(slug: string) {
   const db = getDb();
   const product = db.prepare(`SELECT p.*, b.name as brand_name, b.slug as brand_slug, c.name as category_name, c.slug as category_slug, sc.name as subcategory_name
     FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN categories sc ON p.subcategory_id = sc.id
-    WHERE p.slug = ? AND p.deleted_at IS NULL`).get(slug) as any;
+    WHERE p.slug = ? AND p.status = 'published' AND p.deleted_at IS NULL`).get(slug) as any;
   if (!product) return null;
 
   // Safely parse JSON fields — handles double-stringified data

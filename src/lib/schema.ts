@@ -44,7 +44,7 @@ export function initializeDatabase() {
       benefits TEXT DEFAULT '[]', pros TEXT DEFAULT '[]', cons TEXT DEFAULT '[]',
       buying_advice TEXT DEFAULT '', specifications TEXT DEFAULT '{}',
       tags TEXT DEFAULT '[]',
-      status TEXT DEFAULT 'draft' CHECK(status IN ('draft','published','archived','out_of_stock','expired')),
+      status TEXT DEFAULT 'draft' CHECK(status IN ('draft','in_review','ready','published','archived','out_of_stock','expired')),
       is_featured INTEGER DEFAULT 0, is_trending INTEGER DEFAULT 0, is_editors_pick INTEGER DEFAULT 0,
       -- DUAL DESTINATION SYSTEM
       global_affiliate_url TEXT DEFAULT '', global_affiliate_network TEXT DEFAULT '',

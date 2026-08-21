@@ -96,8 +96,10 @@ export default function AdminProducts() {
         <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}
           className="px-3 py-2 border border-gray-200 rounded-md text-sm bg-white">
           <option value="">All Status</option>
-          <option value="published">Published</option>
           <option value="draft">Draft</option>
+          <option value="in_review">In Review</option>
+          <option value="ready">Ready</option>
+          <option value="published">Published</option>
           <option value="archived">Archived</option>
         </select>
         {selected.size > 0 && (
@@ -153,6 +155,8 @@ export default function AdminProducts() {
                     <td className="p-3 hidden lg:table-cell">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         p.status === 'published' ? 'bg-green-50 text-green-700' :
+                        p.status === 'in_review' ? 'bg-blue-50 text-blue-700' :
+                        p.status === 'ready' ? 'bg-purple-50 text-purple-700' :
                         p.status === 'draft' ? 'bg-yellow-50 text-yellow-700' :
                         'bg-gray-100 text-gray-500'
                       }`}>{p.status}</span>

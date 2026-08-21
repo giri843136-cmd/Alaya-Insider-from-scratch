@@ -62,6 +62,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (slugExists) return NextResponse.json({ error: 'Slug already in use' }, { status: 400 });
   }
 
+  // Server-side publish validation
+  const newStatus = data.status ?? existing.status;
+  if (newStatus === 'published' && existing.status !== 'published') {
+    const errors: string[] = [];
+    const n = data.name ?? existing.name;
+    const img = data.primary_image ?? existing.primary_image;
+    const cat = data.category_id ?? existing.category_id;
+    const brand = data.brand_id ?? existing.brand_id;
+    const desc = data.short_description ?? existing.short_description;
+    const why = data.why_we_recommend ?? existing.why_we_recommend;
+    const seoT = data.seo_title ?? existing.seo_title;
+    const seoD = data.seo_description ?? existing.seo_description;
+    const gUrl = data.global_affiliate_url ?? existing.global_affiliate_url;
+    const iUrl = data.india_affiliate_url ?? existing.india_affiliate_url;
+    const gActive = data.global_active !== undefined ? data.global_active : existing.global_active;
+    const iActive = data.india_active !== undefined ? data.india_active : existing.india_active;
+
+    if (!n || !n.trim()) errors.push('Product name is required');
+    if (!img) errors.push('Primary image is required');
+    if (!cat) errors.push('Category is required');
+    if (!brand) errors.push('Brand is required');
+    if (!desc) errors.push('Description is required');
+    if (!why) errors.push('Why We Recommend It is required');
+    if (!seoT) errors.push('SEO title is required');
+    if (!seoD) errors.push('Meta description is required');
+    if (!(gActive && gUrl) && !(iActive && iUrl)) errors.push('At least one affiliate destination is required');
+
+    if (errors.length > 0) {
+      return NextResponse.json({ error: 'Cannot publish', errors, blockers: errors }, { status: 422 });
+    }
+  }
+
   // Build update dynamically to handle ALL fields including destinations
   const fields: Record<string, any> = {
     name: data.name ?? existing.name,
@@ -83,12 +115,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     full_description: data.full_description ?? existing.full_description,
     why_we_recommend: data.why_we_recommend ?? existing.why_we_recommend,
     best_for: data.best_for ?? existing.best_for,
-    benefits: JSON.stringify(data.benefits ?? JSON.parse(existing.benefits || '[]')),
-    pros: JSON.stringify(data.pros ?? JSON.parse(existing.pros || '[]')),
-    cons: JSON.stringify(data.cons ?? JSON.parse(existing.cons || '[]')),
+    benefits: data.benefits !== undefined ? (typeof data.benefits === 'string' ? data.benefits : JSON.stringify(data.benefits)) : existing.benefits,
+    pros: data.pros !== undefined ? (typeof data.pros === 'string' ? data.pros : JSON.stringify(data.pros)) : existing.pros,
+    cons: data.cons !== undefined ? (typeof data.cons === 'string' ? data.cons : JSON.stringify(data.cons)) : existing.cons,
     buying_advice: data.buying_advice ?? existing.buying_advice,
-    specifications: JSON.stringify(data.specifications ?? JSON.parse(existing.specifications || '{}')),
-    tags: JSON.stringify(data.tags ?? JSON.parse(existing.tags || '[]')),
+    specifications: data.specifications !== undefined ? (typeof data.specifications === 'string' ? data.specifications : JSON.stringify(data.specifications)) : existing.specifications,
+    tags: data.tags !== undefined ? (typeof data.tags === 'string' ? data.tags : JSON.stringify(data.tags)) : existing.tags,
     status: data.status ?? existing.status,
     is_featured: data.is_featured !== undefined ? (data.is_featured ? 1 : 0) : existing.is_featured,
     is_trending: data.is_trending !== undefined ? (data.is_trending ? 1 : 0) : existing.is_trending,
@@ -129,8 +161,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   db.prepare(sql).run(...Object.values(fields), id);
 
+  // Log status change specifically
+  const action = newStatus !== existing.status
+    ? (newStatus === 'published' ? 'published' : newStatus === 'archived' ? 'archived' : 'updated')
+    : 'updated';
+  const details = newStatus !== existing.status
+    ? `Product "${fields.name}" ${action} (${existing.status} → ${newStatus})`
+    : `Product "${fields.name}" updated`;
   db.prepare('INSERT INTO activity_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(uuid(), user.id, 'updated', 'product', id, `Product "${fields.name}" updated`);
+    .run(uuid(), user.id, action, 'product', id, details);
 
   return NextResponse.json({ success: true });
 }
