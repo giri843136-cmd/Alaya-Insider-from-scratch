@@ -56,9 +56,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const resolved = resolveCategory(slug);
   if (!resolved || resolved.type === 'redirect') return { title: 'Category Not Found' };
   const cat = resolved.category;
+
+  // Count products for this category/subcategory
+  const productCount = (db.prepare(`
+    SELECT COUNT(*) as cnt FROM products
+    WHERE (category_id = ? OR subcategory_id = ? OR category_id IN (SELECT id FROM categories WHERE parent_id = ?))
+      AND status = 'published' AND deleted_at IS NULL
+  `).get(cat.id, cat.id, cat.id) as any).cnt;
+
+  // Thin subcategories (0 products, has parent) → noindex, follow
+  const isThin = cat.parent_id && productCount === 0;
+
   return {
     title: cat.seo_title || `${cat.name} — Alaya Insider`,
     description: cat.seo_description || cat.description || `Discover curated ${cat.name.toLowerCase()} picks on Alaya Insider.`,
+    ...(isThin ? { robots: { index: false, follow: true } } : {}),
   };
 }
 

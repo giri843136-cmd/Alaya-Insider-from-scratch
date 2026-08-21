@@ -34,7 +34,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     });
   });
 
-  // Categories — hierarchical URLs
+  // Categories — hierarchical URLs (only include subcategories with products)
   const mainCats = db.prepare('SELECT id, slug, updated_at FROM categories WHERE parent_id IS NULL ORDER BY sort_order').all() as any[];
   mainCats.forEach((c: any) => {
     entries.push({
@@ -43,8 +43,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'weekly',
       priority: 0.7,
     });
-    // Subcategories under this parent
-    const subs = db.prepare('SELECT slug, updated_at FROM categories WHERE parent_id = ? ORDER BY sort_order').all(c.id) as any[];
+    // Only include subcategories that have at least 1 published product
+    const subs = db.prepare(`
+      SELECT s.slug, s.updated_at FROM categories s
+      WHERE s.parent_id = ?
+        AND (SELECT COUNT(*) FROM products p WHERE (p.category_id = s.id OR p.subcategory_id = s.id) AND p.status = 'published' AND p.deleted_at IS NULL) > 0
+      ORDER BY s.sort_order
+    `).all(c.id) as any[];
     subs.forEach((s: any) => {
       entries.push({
         url: `${baseUrl}/category/${c.slug}/${s.slug}`,
