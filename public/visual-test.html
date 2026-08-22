@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hero Visual QA — Alaya Insider</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Inter, -apple-system, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+  h1 { font-size: 18px; margin-bottom: 20px; font-weight: 600; }
+  .viewport-test {
+    margin-bottom: 24px;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+  .viewport-test__label {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #2d2b3d;
+    color: white;
+    letter-spacing: 0.05em;
+  }
+  .viewport-test__frame {
+    border: none;
+    display: block;
+  }
+  .grid {
+    display: grid;
+    gap: 20px;
+  }
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 24px 0 12px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+  <h1>🔍 Hero Visual QA — Alaya Insider</h1>
+  <p style="font-size:13px;color:#888;margin-bottom:24px">
+    Open this page to visually verify the hero carousel at all breakpoints.
+    Each frame below loads the actual homepage at different widths.
+  </p>
+
+  <div class="section-title">Mobile</div>
+  <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+    <div class="viewport-test">
+      <div class="viewport-test__label">320 × 600</div>
+      <iframe src="/" class="viewport-test__frame" style="width:320px;height:600px;"></iframe>
+    </div>
+    <div class="viewport-test">
+      <div class="viewport-test__label">375 × 700</div>
+      <iframe src="/" class="viewport-test__frame" style="width:375px;height:700px;"></iframe>
+    </div>
+    <div class="viewport-test">
+      <div class="viewport-test__label">390 × 700</div>
+      <iframe src="/" class="viewport-test__frame" style="width:390px;height:700px;"></iframe>
+    </div>
+    <div class="viewport-test">
+      <div class="viewport-test__label">430 × 800</div>
+      <iframe src="/" class="viewport-test__frame" style="width:430px;height:800px;"></iframe>
+    </div>
+  </div>
+
+  <div class="section-title">Tablet</div>
+  <div class="grid">
+    <div class="viewport-test">
+      <div class="viewport-test__label">768 × 500</div>
+      <iframe src="/" class="viewport-test__frame" style="width:768px;height:500px;"></iframe>
+    </div>
+  </div>
+
+  <div class="section-title">Desktop</div>
+  <div class="grid">
+    <div class="viewport-test">
+      <div class="viewport-test__label">1024 × 500</div>
+      <iframe src="/" class="viewport-test__frame" style="width:1024px;height:500px;"></iframe>
+    </div>
+    <div class="viewport-test">
+      <div class="viewport-test__label">1280 × 500</div>
+      <iframe src="/" class="viewport-test__frame" style="width:1280px;height:500px;"></iframe>
+    </div>
+  </div>
+</body>
+</html>
