@@ -1,16 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['better-sqlite3'],
-  },
+  serverExternalPackages: ['better-sqlite3'],
   images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: '**' },
-    ],
-  },
-  webpack: (config) => {
-    config.externals = [...(config.externals || []), 'better-sqlite3'];
-    return config;
+    unoptimized: true,
   },
   async headers() {
     return [

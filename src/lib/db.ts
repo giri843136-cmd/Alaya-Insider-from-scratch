@@ -7,7 +7,7 @@ let db: Database.Database;
 
 export function getDb(): Database.Database {
   if (!db) {
-    const dbPath = path.resolve(process.cwd(), DB_PATH);
+    const dbPath = path.resolve(/* turbopackIgnore: true */ process.cwd(), DB_PATH);
     db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
