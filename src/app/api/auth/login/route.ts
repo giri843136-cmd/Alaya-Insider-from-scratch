@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       SELECT u.*, r.name as role_name, r.permissions as role_permissions
       FROM users u
       JOIN roles r ON u.role_id = r.id
-      WHERE (u.email = ? OR u.username = ?) AND u.is_active = 1
+      WHERE (LOWER(u.email) = LOWER(?) OR u.username = ?) AND u.is_active = 1
     `).get(email, email) as any;
 
     if (!user || !verifyPassword(password, user.password_hash)) {
