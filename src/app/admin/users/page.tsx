@@ -104,7 +104,7 @@ export default function AdminUsers() {
                 </td>
                 <td className="p-3 text-gray-400 text-xs hidden lg:table-cell">{u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
                 <td className="p-3">
-                  {u.role_name !== 'super_admin' && (
+                  {u.id !== users[0]?.id && (
                     <button onClick={() => handleDelete(u.id)} className="text-red-500 hover:text-red-700 text-xs">Delete</button>
                   )}
                 </td>
