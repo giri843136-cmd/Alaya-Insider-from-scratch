@@ -1,0 +1,59 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+// Optional admin IP whitelist
+// Set ADMIN_ALLOWED_IPS in .env as comma-separated IPs (e.g., "1.2.3.4,5.6.7.8")
+// If empty, all IPs are allowed (less secure but works with dynamic IPs)
+const adminAllowedIPs = process.env.ADMIN_ALLOWED_IPS
+  ? process.env.ADMIN_ALLOWED_IPS.split(',').map(ip => ip.trim())
+  : [];
+
+function getClientIP(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  const real = req.headers.get('x-real-ip');
+  if (real) return real;
+  return 'unknown';
+}
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const response = NextResponse.next();
+
+  // Add security headers to all responses
+  response.headers.set('X-Request-ID', crypto.randomUUID());
+
+  // Admin IP whitelist (only if ADMIN_ALLOWED_IPS is set)
+  if (adminAllowedIPs.length > 0 && pathname.startsWith('/admin') && pathname !== '/admin/login') {
+    const clientIP = getClientIP(request);
+    const isAllowed = adminAllowedIPs.some(ip =>
+      clientIP === ip || clientIP.startsWith(ip)
+    );
+
+    if (!isAllowed) {
+      console.warn(`[SECURITY] Admin access blocked from IP: ${clientIP}`);
+      return NextResponse.json(
+        { error: 'Access denied' },
+        { status: 403 }
+      );
+    }
+  }
+
+  // Block direct access to API auth endpoints from non-browser requests
+  if (pathname.startsWith('/api/auth/login')) {
+    const userAgent = request.headers.get('user-agent') || '';
+    // Allow if it looks like a real browser or API client
+    if (!userAgent && request.method === 'POST') {
+      // Still allow POST but log it
+      console.warn(`[SECURITY] Login attempt without User-Agent`);
+    }
+  }
+
+  return response;
+}
+
+export const config = {
+  matcher: [
+    // Match all paths except static files and Next.js internals
+    '/((?!_next/static|_next/image|favicon.ico|images/).*)',
+  ],
+};

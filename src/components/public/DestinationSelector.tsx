@@ -86,7 +86,7 @@ export default function DestinationSelector({ product, compact = false }: Props)
         )}
       </div>
 
-      <p className="text-[11px] text-gray-300 mt-4">Prices, availability and regional selection may vary.</p>
+      <p className="text-[11px] text-gray-400 mt-4">Prices shown are approximate and may vary. Click a shopping button above to see the current price on Amazon.</p>
     </div>
   );
 }

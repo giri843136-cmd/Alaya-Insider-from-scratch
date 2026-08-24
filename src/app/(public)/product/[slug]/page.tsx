@@ -86,12 +86,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {product.brand_name && <p className="text-xs font-medium text-warm uppercase tracking-wider mb-2">{product.brand_name}</p>}
           <h1 className="text-2xl sm:text-3xl font-semibold text-accent mb-3">{product.name}</h1>
           <div className="mb-4"><StarRating rating={product.rating} count={product.review_count} /></div>
-          <div className="flex items-baseline gap-3 mb-6">
+          <div className="flex items-baseline gap-3 mb-2">
             <span className="text-2xl font-semibold text-accent">${product.current_price.toFixed(2)}</span>
             {product.previous_price && product.previous_price > product.current_price && (
               <span className="text-lg text-gray-400 line-through">${product.previous_price.toFixed(2)}</span>
             )}
           </div>
+          <p className="text-[11px] text-gray-400 mb-6">Prices shown are for reference and may vary. Click the shopping button below to see the latest price on Amazon.</p>
 
           {!isAvailable && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
