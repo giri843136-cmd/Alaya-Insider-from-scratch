@@ -15,6 +15,18 @@ export default function AdminUsers() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
+  const handleDelete = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+    const res = await adminFetch(`/api/users/${userId}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast('User deleted');
+      setUsers(users.filter(u => u.id !== userId));
+    } else {
+      const data = await res.json();
+      showToast(data.error || 'Failed to delete');
+    }
+  };
+
   const handleAdd = async () => {
     const res = await adminFetch('/api/users', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newUser),
@@ -78,6 +90,7 @@ export default function AdminUsers() {
               <th className="p-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Email</th>
               <th className="p-3 text-left text-xs font-medium text-gray-500 hidden md:table-cell">Role</th>
               <th className="p-3 text-left text-xs font-medium text-gray-500 hidden lg:table-cell">Last Login</th>
+              <th className="p-3 text-left text-xs font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -90,6 +103,11 @@ export default function AdminUsers() {
                   <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{u.role_name}</span>
                 </td>
                 <td className="p-3 text-gray-400 text-xs hidden lg:table-cell">{u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
+                <td className="p-3">
+                  {u.role_name !== 'super_admin' && (
+                    <button onClick={() => handleDelete(u.id)} className="text-red-500 hover:text-red-700 text-xs">Delete</button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
