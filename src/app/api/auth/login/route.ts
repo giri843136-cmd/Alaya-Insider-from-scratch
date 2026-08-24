@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         period: 30,
         secret: OTPAuth.Secret.fromBase32(user.two_factor_secret),
       });
-      const delta = totp.validate({ token: twoFactorCode, window: 1 });
+      const delta = totp.validate({ token: twoFactorCode, window: 2 });
       if (delta === null) {
         return NextResponse.json({ error: 'Invalid 2FA code' }, { status: 401 });
       }

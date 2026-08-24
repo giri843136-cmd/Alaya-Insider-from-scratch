@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
 
   const { code } = await req.json();
   if (!code) return NextResponse.json({ error: 'Code required' }, { status: 400 });
+  const cleanCode = String(code).trim().replace(/\s/g, '');
 
   const db = getDb();
   const user = db.prepare('SELECT two_factor_secret FROM users WHERE id = ?').get(authUser.id) as any;
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     secret: OTPAuth.Secret.fromBase32(user.two_factor_secret),
   });
 
-  const delta = totp.validate({ token: code, window: 1 });
+  const delta = totp.validate({ token: cleanCode, window: 2 });
   if (delta === null) {
     return NextResponse.json({ error: 'Invalid code. Try again.' }, { status: 400 });
   }
