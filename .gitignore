@@ -53,3 +53,4 @@ next-env.d.ts
 # temporary
 *.tmp
 *.temp
+.next-deploy.tar.gz\nalaya-deploy.tar.gz
