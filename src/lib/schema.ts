@@ -13,6 +13,7 @@ export function initializeDatabase() {
       id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL, first_name TEXT DEFAULT '', last_name TEXT DEFAULT '',
       role_id TEXT NOT NULL, avatar TEXT DEFAULT '', is_active INTEGER NOT NULL DEFAULT 1,
+      two_factor_enabled INTEGER NOT NULL DEFAULT 0, two_factor_secret TEXT DEFAULT '',
       last_login TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (role_id) REFERENCES roles(id)
@@ -248,6 +249,11 @@ export function initializeDatabase() {
       value TEXT DEFAULT ''
     );
   `);
+
+  // Migration: add 2FA columns if missing (for existing databases)
+  try { db.exec(`ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN two_factor_secret TEXT DEFAULT ''`); } catch {}
+
   return db;
 }
 
@@ -283,8 +289,8 @@ export function seedAdmin() {
   const role = db.prepare("SELECT id FROM roles WHERE name = 'super_admin'").get() as any;
   if (!role) return;
   db.prepare('INSERT INTO users (id, email, username, password_hash, first_name, last_name, role_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(uuid(), 'admin@alayainsider.com', 'admin', bcryptjs.hashSync(seedPassword, 10), 'Admin', 'User', role.id);
-  console.log('Admin user created: admin@alayainsider.com');
+    .run(uuid(), 'Alayainsider@gmail.com', 'admin', bcryptjs.hashSync(seedPassword, 10), 'Alaya', 'Insider', role.id);
+  console.log('Admin user created: Alayainsider@gmail.com');
 }
 
 export function seedHomepageSections() {

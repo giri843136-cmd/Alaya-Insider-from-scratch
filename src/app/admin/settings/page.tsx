@@ -7,6 +7,10 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [twoFaEnabled, setTwoFaEnabled] = useState(false);
+  const [twoFaSetup, setTwoFaSetup] = useState<{ secret: string; uri: string } | null>(null);
+  const [twoFaCode, setTwoFaCode] = useState('');
+  const [twoFaLoading, setTwoFaLoading] = useState(false);
 
   useEffect(() => {
     adminFetch('/api/settings').then(r => r.json()).then(d => { setSettings(d.settings || {}); setLoading(false); });
@@ -60,6 +64,44 @@ export default function AdminSettings() {
     ]},
   ];
 
+  const handle2FASetup = async () => {
+    setTwoFaLoading(true);
+    const res = await adminFetch('/api/auth/2fa/setup', { method: 'POST' });
+    const data = await res.json();
+    if (data.uri) setTwoFaSetup(data);
+    setTwoFaLoading(false);
+  };
+
+  const handle2FAVerify = async () => {
+    setTwoFaLoading(true);
+    const res = await adminFetch('/api/auth/2fa/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: twoFaCode }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setTwoFaEnabled(true);
+      setTwoFaSetup(null);
+      showToast('2FA enabled!');
+    } else {
+      showToast(data.error || 'Invalid code');
+    }
+    setTwoFaLoading(false);
+  };
+
+  const handle2FADisable = async () => {
+    if (!confirm('Disable 2FA? This makes your account less secure.')) return;
+    setTwoFaLoading(true);
+    const res = await adminFetch('/api/auth/2fa/disable', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      setTwoFaEnabled(false);
+      showToast('2FA disabled');
+    }
+    setTwoFaLoading(false);
+  };
+
   return (
     <div>
       {toast && <div className="fixed top-4 right-4 z-50 bg-accent text-white px-4 py-2.5 rounded-md text-sm shadow-lg toast-enter">{toast}</div>}
@@ -72,7 +114,45 @@ export default function AdminSettings() {
       </div>
 
       <div className="space-y-6">
-        {groups.map(g => (
+      {/* 2FA Security Section */}
+      <div className="bg-white border border-gray-100 rounded-lg p-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-1">Two-Factor Authentication (2FA)</h2>
+        <p className="text-xs text-gray-400 mb-4">Add an extra layer of security to your admin account using an authenticator app.</p>
+        <div className="space-y-3">
+          {!twoFaEnabled && !twoFaSetup && (
+            <button onClick={handle2FASetup} disabled={twoFaLoading}
+              className="px-4 py-2 bg-green-600 text-white text-sm rounded-md disabled:opacity-50">
+              {twoFaLoading ? 'Setting up...' : 'Enable 2FA'}
+            </button>
+          )}
+          {twoFaSetup && (
+            <div className="border border-dashed border-green-300 rounded-lg p-4 bg-green-50">
+              <p className="text-sm font-medium text-green-800 mb-2">Scan this QR code with your authenticator app:</p>
+              <p className="text-xs text-gray-600 mb-1">Manual entry key: <code className="bg-white px-2 py-0.5 rounded border text-xs">{twoFaSetup.secret}</code></p>
+              <div className="flex items-center gap-2 mt-3">
+                <input type="text" placeholder="Enter 6-digit code" value={twoFaCode} onChange={e => setTwoFaCode(e.target.value)}
+                  className="px-3 py-2 border border-gray-200 rounded-md text-sm w-40" />
+                <button onClick={handle2FAVerify} disabled={twoFaLoading || twoFaCode.length < 6}
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-md disabled:opacity-50">
+                  Verify & Enable
+                </button>
+              </div>
+            </div>
+          )}
+          {twoFaEnabled && !twoFaSetup && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-green-600 font-medium">2FA is enabled ✓</span>
+              <button onClick={handle2FADisable} disabled={twoFaLoading}
+                className="px-3 py-1.5 text-red-600 text-xs border border-red-200 rounded-md hover:bg-red-50">
+                Disable 2FA
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Site Settings */}
+      {groups.map(g => (
           <div key={g.title} className="bg-white border border-gray-100 rounded-lg p-6">
             <h2 className="text-sm font-semibold text-gray-700 mb-1">{g.title}</h2>
             {(g as any).desc && <p className="text-xs text-gray-400 mb-4">{(g as any).desc}</p>}

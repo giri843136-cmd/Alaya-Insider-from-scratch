@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { email, password } = await req.json();
+    const { email, password, twoFactorCode } = await req.json();
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
     }
@@ -29,6 +29,28 @@ export async function POST(req: NextRequest) {
 
     if (!user || !verifyPassword(password, user.password_hash)) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+
+    // Check if 2FA is enabled
+    if (user.two_factor_enabled && user.two_factor_secret) {
+      if (!twoFactorCode) {
+        // Password correct but need 2FA code
+        return NextResponse.json({ requires2FA: true, message: 'Enter your 2FA code' }, { status: 200 });
+      }
+      // Verify TOTP code
+      const OTPAuth = await import('otpauth');
+      const totp = new OTPAuth.TOTP({
+        issuer: 'Alaya Insider',
+        label: user.email,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(user.two_factor_secret),
+      });
+      const delta = totp.validate({ token: twoFactorCode, window: 1 });
+      if (delta === null) {
+        return NextResponse.json({ error: 'Invalid 2FA code' }, { status: 401 });
+      }
     }
 
     db.prepare("UPDATE users SET last_login = datetime('now') WHERE id = ?").run(user.id);
