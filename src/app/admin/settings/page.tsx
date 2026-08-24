@@ -66,9 +66,17 @@ export default function AdminSettings() {
 
   const handle2FASetup = async () => {
     setTwoFaLoading(true);
-    const res = await adminFetch('/api/auth/2fa/setup', { method: 'POST' });
-    const data = await res.json();
-    if (data.uri) setTwoFaSetup(data);
+    try {
+      const res = await adminFetch('/api/auth/2fa/setup', { method: 'POST' });
+      const data = await res.json();
+      if (data.uri) {
+        setTwoFaSetup(data);
+      } else {
+        showToast(data.error || 'Failed to start 2FA setup');
+      }
+    } catch (err) {
+      showToast('Error connecting to server');
+    }
     setTwoFaLoading(false);
   };
 
