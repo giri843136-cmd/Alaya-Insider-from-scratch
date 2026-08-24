@@ -8,7 +8,7 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
-  const [twoFaSetup, setTwoFaSetup] = useState<{ secret: string; uri: string } | null>(null);
+  const [twoFaSetup, setTwoFaSetup] = useState<{ secret: string; uri: string; qr: string } | null>(null);
   const [twoFaCode, setTwoFaCode] = useState('');
   const [twoFaLoading, setTwoFaLoading] = useState(false);
 
@@ -137,7 +137,7 @@ export default function AdminSettings() {
             <div className="border border-dashed border-green-300 rounded-lg p-4 bg-green-50">
               <p className="text-sm font-medium text-green-800 mb-2">Scan this QR code with your authenticator app:</p>
               <div className="bg-white p-3 rounded-lg inline-block mb-3 border">
-                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(twoFaSetup.uri)}`} alt="2FA QR Code" className="w-[200px] h-[200px]" />
+                <img src={twoFaSetup.qr} alt="2FA QR Code" className="w-[200px] h-[200px]" />
               </div>
               <p className="text-xs text-gray-600 mb-1">Can't scan? Enter this key manually: <code className="bg-white px-2 py-0.5 rounded border text-xs">{twoFaSetup.secret}</code></p>
               <div className="flex items-center gap-2 mt-3">
