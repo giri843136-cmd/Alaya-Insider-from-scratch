@@ -4,6 +4,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Low-memory production tuning
+  poweredByHeader: false,
   async headers() {
     return [
       {

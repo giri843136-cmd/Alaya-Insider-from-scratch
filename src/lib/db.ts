@@ -18,6 +18,11 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 5000');
+    // Memory tuning for constrained hosting (shared hosting / small VPS):
+    // cap page cache at 8MB instead of SQLite's ~2GB default ceiling,
+    // and disable mmap so the database doesn't inflate process RSS.
+    db.pragma('cache_size = -8000');
+    db.pragma('mmap_size = 0');
   }
   return db;
 }
