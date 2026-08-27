@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alaya Insider — Temporarily Unavailable</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #faf8f6;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      text-align: center;
+      max-width: 480px;
+    }
+    .code {
+      font-size: 4rem;
+      font-weight: 600;
+      color: #d4cfc9;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #2d2926;
+      margin-bottom: 12px;
+    }
+    p {
+      color: #888;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 10px 24px;
+      background: #2d2926;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #4a4543; }
+    .links {
+      margin-top: 32px;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+    .links a { color: #888; text-decoration: none; }
+    .links a:hover { color: #2d2926; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="code">503</div>
+    <h1>We&rsquo;ll Be Right Back</h1>
+    <p>Alaya Insider is temporarily unavailable. We&rsquo;re working on it and should be back shortly. No action needed on your part.</p>
+    <a href="/" class="btn">Try Again</a>
+    <div class="links">
+      <a href="/products">Products</a> &middot;
+      <a href="/journal">Journal</a> &middot;
+      <a href="/categories">Categories</a>
+    </div>
+  </div>
+  <script>setTimeout(function(){ location.reload(); }, 15000);</script>
+</body>
+</html>

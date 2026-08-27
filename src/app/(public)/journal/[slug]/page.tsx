@@ -6,7 +6,7 @@ import Breadcrumbs from '@/components/public/Breadcrumbs';
 import NewsletterBox from '@/components/public/NewsletterBox';
 import type { Metadata } from 'next';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300; // Cache articles 5 minutes
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   ensureDbReady();

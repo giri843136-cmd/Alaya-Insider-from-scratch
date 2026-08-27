@@ -3,7 +3,7 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300; // Cache collections listing 5 minutes
 export const metadata = { title: 'Collections — Alaya Insider' };
 
 export default function CollectionsPage() {

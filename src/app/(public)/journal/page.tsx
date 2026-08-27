@@ -4,7 +4,7 @@ import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import NewsletterBox from '@/components/public/NewsletterBox';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 120; // Cache journal listing 2 minutes
 export const metadata = { title: 'Journal — Alaya Insider', description: 'Buying guides, reviews, and product recommendations.' };
 
 export default function JournalPage() {

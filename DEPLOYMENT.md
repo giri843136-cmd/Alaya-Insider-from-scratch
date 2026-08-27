@@ -63,10 +63,12 @@ npm run build
 
 ```bash
 npm install -g pm2
-pm2 start npm --name alayainsider -- start
+pm2 start ecosystem.config.cjs
 pm2 save
 pm2 startup  # Follow instructions to enable auto-start on boot
 ```
+
+> The `ecosystem.config.cjs` includes memory tuning (`max_memory_restart: 256M`, `NODE_OPTIONS: --max-old-space-size=200`) that keeps the process alive on shared hosting.
 
 ### 8. Verify
 
@@ -172,6 +174,24 @@ npm install
 npm run build
 pm2 restart alayainsider
 ```
+
+## LiteSpeed 503 Error Page (Hostinger)
+
+Hostinger uses LiteSpeed as the reverse proxy. When the Node.js process is restarting (e.g., after a memory spike), LiteSpeed returns a raw 503 error. To show a friendly page instead:
+
+1. Copy the static 503 page to LiteSpeed's error directory:
+```bash
+sudo cp /var/www/alayainsider/public/503.html /usr/local/lsws/error/503.html
+```
+
+2. Configure LiteSpeed to serve it. Add to your LiteSpeed vhost config:
+```apache
+errorfile 503 /usr/local/lsws/error/503.html
+```
+
+3. If you use Hostinger's hPanel, you can set custom error pages under **Advanced → Error Pages**.
+
+> The 503 page auto-reloads after 15 seconds, so users recover automatically once the backend restarts.
 
 ## Important Notes
 

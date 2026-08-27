@@ -3,7 +3,7 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300; // Cache brands listing 5 minutes
 export const metadata = { title: 'Brands — Alaya Insider' };
 
 export default function BrandsPage() {

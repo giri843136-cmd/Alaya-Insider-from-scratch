@@ -13,10 +13,15 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        // Cap Node.js heap to 200MB — prevents runaway memory growth.
+        // Node.js can use ~30% more than this for native buffers,
+        // keeping total RSS well under 300MB.
+        NODE_OPTIONS: '--max-old-space-size=200',
       },
       // Restart if RSS exceeds this — set below your plan's memory limit.
-      // Hostinger shared plans: keep at ~60-70% of your allowed RAM.
-      max_memory_restart: '300M',
+      // Hostinger shared plans: keep at ~50-60% of your allowed RAM.
+      // With revalidate caching, RSS should stay well under 200MB.
+      max_memory_restart: '256M',
       // Don't burn CPU/RAM on restart storms
       exp_backoff_restart_delay: 200,
       max_restarts: 20,

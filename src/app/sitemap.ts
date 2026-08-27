@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300; // Regenerate sitemap every 5 minutes
 
 export default function sitemap(): MetadataRoute.Sitemap {
   ensureDbReady();
