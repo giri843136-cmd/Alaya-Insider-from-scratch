@@ -4,6 +4,7 @@ import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { v4 as uuid } from 'uuid';
 import slugify from 'slugify';
+import { getLivePrice, extractAsin } from '@/lib/amazon-price';
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -112,9 +113,19 @@ export async function GET(req: NextRequest) {
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
 
-  return NextResponse.json({
-    products: products.map((p: any) => ({
+  // Enrich products with live prices from Amazon API
+  const enrichedProducts = await Promise.all(products.map(async (p: any) => {
+    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
+    let livePrice: number | null = null;
+    if (asin) {
+      try {
+        const priceData = await getLivePrice(asin);
+        livePrice = priceData.price;
+      } catch {}
+    }
+    return {
       ...p,
+      live_price: livePrice,
       benefits: JSON.parse(p.benefits || '[]'),
       pros: JSON.parse(p.pros || '[]'),
       cons: JSON.parse(p.cons || '[]'),
@@ -122,7 +133,11 @@ export async function GET(req: NextRequest) {
       tags: JSON.parse(p.tags || '[]'),
       specifications: JSON.parse(p.specifications || '{}'),
       additional_retailers: JSON.parse(p.additional_retailers || '[]'),
-    })),
+    };
+  }));
+
+  return NextResponse.json({
+    products: enrichedProducts,
     pagination: {
       page,
       limit,

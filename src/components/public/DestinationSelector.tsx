@@ -1,5 +1,7 @@
 'use client';
 
+import PaidLinkTag from './PaidLinkTag';
+
 interface Props { product: any; compact?: boolean; }
 
 export default function DestinationSelector({ product, compact = false }: Props) {
@@ -34,7 +36,7 @@ export default function DestinationSelector({ product, compact = false }: Props)
       <div className={`grid gap-4 ${globalActive && indiaActive ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 max-w-md'}`}>
         {/* Global */}
         {globalActive && (
-          <a href={`/go/${p.slug}?destination=global`} target="_blank" rel="noopener noreferrer nofollow"
+          <a href={`/go/${p.slug}?destination=global`} target="_blank" rel="noopener noreferrer nofollow sponsored"
             onClick={() => handleClick('global')}
             className={`group block rounded-xl border p-5 transition-all duration-200 hover:shadow-md ${
               indiaActive ? 'border-accent/15 bg-accent/[0.015] hover:border-accent/30' : 'border-gray-200 hover:border-gray-300'
@@ -53,6 +55,7 @@ export default function DestinationSelector({ product, compact = false }: Props)
                   {p.global_cta_label || 'Explore Global Options'}
                   <svg className="w-3.5 h-3.5 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                 </div>
+                <PaidLinkTag className="mt-1.5" />
                 <p className="text-[10px] text-gray-300 mt-2.5">Automatically routed where supported.</p>
               </div>
             </div>
@@ -61,7 +64,7 @@ export default function DestinationSelector({ product, compact = false }: Props)
 
         {/* India */}
         {indiaActive && (
-          <a href={`/go/${p.slug}?destination=india`} target="_blank" rel="noopener noreferrer nofollow"
+          <a href={`/go/${p.slug}?destination=india`} target="_blank" rel="noopener noreferrer nofollow sponsored"
             onClick={() => handleClick('india')}
             className="group block rounded-xl border border-gray-200 p-5 transition-all duration-200 hover:shadow-md hover:border-gray-300 bg-white">
             <div className="flex items-start gap-3.5">
@@ -79,6 +82,7 @@ export default function DestinationSelector({ product, compact = false }: Props)
                   {p.india_cta_label || 'Explore India'}
                   <svg className="w-3.5 h-3.5 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                 </div>
+                <PaidLinkTag className="mt-1.5" />
                 <p className="text-[10px] text-gray-300 mt-2.5">Local pricing and availability may vary.</p>
               </div>
             </div>

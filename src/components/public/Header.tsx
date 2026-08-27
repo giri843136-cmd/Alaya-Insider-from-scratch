@@ -65,7 +65,7 @@ export default function Header() {
                           <Link key={p.id} href={`/product/${p.slug}`} onClick={() => setSearchOpen(false)}
                             className="flex items-center gap-3 py-2 px-2 hover:bg-gray-50 rounded-md">
                             <div className="w-9 h-9 bg-ivory rounded flex-shrink-0" />
-                            <div><p className="text-[13px] text-gray-800 line-clamp-1">{p.name}</p><p className="text-[11px] text-gray-400">{p.brand_name} · ${p.current_price}</p></div>
+                            <div><p className="text-[13px] text-gray-800 line-clamp-1">{p.name}</p><p className="text-[11px] text-gray-400">{p.brand_name} · {p.live_price != null && p.live_price > 0 ? `$${p.live_price}` : 'Check price on Amazon'}</p></div>
                           </Link>
                         ))}
                       </div>

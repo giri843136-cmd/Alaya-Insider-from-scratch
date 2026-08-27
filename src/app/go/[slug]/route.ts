@@ -40,7 +40,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     }
 
     if (redirectUrl) {
-      return NextResponse.redirect(redirectUrl, 302);
+      const response = NextResponse.redirect(redirectUrl, 302);
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      response.headers.set('Pragma', 'no-cache');
+      response.headers.set('Expires', '0');
+      return response;
     }
   }
 
@@ -60,8 +64,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     if (link.utm_medium) utms.push(`utm_medium=${encodeURIComponent(link.utm_medium)}`);
     if (link.utm_campaign) utms.push(`utm_campaign=${encodeURIComponent(link.utm_campaign)}`);
     if (utms.length) dest += (dest.includes('?') ? '&' : '?') + utms.join('&');
-    return NextResponse.redirect(dest, 302);
+    const response = NextResponse.redirect(dest, 302);
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    return response;
   }
 
-  return NextResponse.redirect(new URL('/', req.url));
+  const fallback = NextResponse.redirect(new URL('/', req.url));
+  fallback.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  return fallback;
 }

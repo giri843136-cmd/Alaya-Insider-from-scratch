@@ -5,9 +5,10 @@ import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import ProductCard from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
+import { getLivePrice, extractAsin } from '@/lib/amazon-price';
 import type { Metadata } from 'next';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 120; // Cache category pages 2 minutes
 
 /* ------------------------------------------------------------------ */
 /*  Resolve the URL segments into a category record                   */
@@ -105,6 +106,19 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     ORDER BY p.is_featured DESC, p.created_at DESC
   `).all(category.id, category.id, category.id) as any[];
 
+  // Enrich products with live prices
+  const enrichedProducts = await Promise.all(products.map(async (p: any) => {
+    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
+    let livePrice: number | null = null;
+    if (asin) {
+      try {
+        const priceData = await getLivePrice(asin);
+        livePrice = priceData.price;
+      } catch {}
+    }
+    return { ...p, live_price: livePrice };
+  }));
+
   // JSON-LD breadcrumb
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
@@ -196,7 +210,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             </h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {products.map((p: any) => (
+            {enrichedProducts.map((p: any) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>

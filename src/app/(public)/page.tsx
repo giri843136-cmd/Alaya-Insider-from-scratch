@@ -5,21 +5,22 @@ import ProductCard from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
 import HeroCarousel from '@/components/public/HeroCarousel';
 import CategoryShowcase from '@/components/public/CategoryShowcase';
+import { getLivePrice, extractAsin } from '@/lib/amazon-price';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60; // Cache homepage for 60 seconds to reduce DB hits
 
-function getHomeData() {
+async function getHomeData() {
   ensureDbReady();
   const db = getDb();
   const sections = db.prepare('SELECT * FROM homepage_sections ORDER BY sort_order').all() as any[];
   const sMap: Record<string, any> = {};
   sections.forEach(s => { sMap[s.section_key] = { ...s, content: JSON.parse(s.content || '{}') }; });
 
-  // Fetch main featured categories with their subcategories
-  const mainCats = db.prepare(`SELECT c.id, c.name, c.slug, c.description, c.image FROM categories c WHERE c.parent_id IS NULL AND c.is_featured = 1 ORDER BY c.sort_order LIMIT 6`).all() as any[];
-  const allSubs = db.prepare(`SELECT id, name, slug, description, image, parent_id, sort_order FROM categories WHERE parent_id IS NOT NULL ORDER BY sort_order`).all() as any[];
+  // Single query: featured main categories + all their subcategories
+  const allCats = db.prepare(`SELECT c.id, c.name, c.slug, c.description, c.image, c.parent_id, c.sort_order FROM categories c WHERE (c.parent_id IS NULL AND c.is_featured = 1) OR c.parent_id IS NOT NULL ORDER BY c.sort_order`).all() as any[];
+  const mainCats = allCats.filter(c => !c.parent_id).slice(0, 6);
   const subsByParent = new Map<string, any[]>();
-  allSubs.forEach((s: any) => {
+  allCats.filter(c => c.parent_id).forEach((s: any) => {
     const arr = subsByParent.get(s.parent_id) || [];
     arr.push(s);
     subsByParent.set(s.parent_id, arr);
@@ -32,19 +33,40 @@ function getHomeData() {
   const collections = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM collection_products cp WHERE cp.collection_id = c.id) as product_count FROM collections c WHERE c.is_active = 1 ORDER BY c.sort_order LIMIT 3`).all();
   const disclosure = (db.prepare("SELECT value FROM site_settings WHERE key = 'affiliate_disclosure'").get() as any)?.value || '';
 
-  // Hero slides
+  // Hero slides + settings (single query for settings)
   const heroSlides = db.prepare(`SELECT * FROM hero_slides WHERE status = 'published'
     AND (start_date IS NULL OR start_date <= datetime('now'))
     AND (end_date IS NULL OR end_date >= datetime('now'))
     ORDER BY sort_order ASC`).all();
   const heroSettings: Record<string, string> = {};
-  (db.prepare('SELECT * FROM hero_settings').all() as any[]).forEach((s: any) => { heroSettings[s.key] = s.value; });
+  (db.prepare('SELECT key, value FROM hero_settings').all() as any[]).forEach((s: any) => { heroSettings[s.key] = s.value; });
 
-  return { sMap, featuredCats, trending, editorsPicks, popular, articles, collections, disclosure, heroSlides, heroSettings };
+  // Enrich products with live prices
+  async function enrichWithPrices(items: any[]) {
+    return Promise.all(items.map(async (p: any) => {
+      const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
+      let livePrice: number | null = null;
+      if (asin) {
+        try {
+          const priceData = await getLivePrice(asin);
+          livePrice = priceData.price;
+        } catch {}
+      }
+      return { ...p, live_price: livePrice };
+    }));
+  }
+
+  const [enrichedTrending, enrichedEditorsPicks, enrichedPopular] = await Promise.all([
+    enrichWithPrices(trending as any[]),
+    enrichWithPrices(editorsPicks as any[]),
+    enrichWithPrices(popular as any[]),
+  ]);
+
+  return { sMap, featuredCats, trending: enrichedTrending, editorsPicks: enrichedEditorsPicks, popular: enrichedPopular, articles, collections, disclosure, heroSlides, heroSettings };
 }
 
-export default function HomePage() {
-  const { sMap, featuredCats, trending, editorsPicks, popular, articles, collections, disclosure, heroSlides, heroSettings } = getHomeData();
+export default async function HomePage() {
+  const { sMap, featuredCats, trending, editorsPicks, popular, articles, collections, disclosure, heroSlides, heroSettings } = await getHomeData();
 
   return (
     <div>

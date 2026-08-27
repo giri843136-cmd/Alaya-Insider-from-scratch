@@ -4,8 +4,10 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import { StarRating } from '@/components/public/ProductCard';
+import PaidLinkTag from '@/components/public/PaidLinkTag';
+import { getLivePrice, extractAsin } from '@/lib/amazon-price';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 120; // Cache comparison pages 2 minutes
 
 export default async function ComparisonPage({ params }: { params: Promise<{ slug: string }> }) {
   ensureDbReady();
@@ -16,7 +18,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
   if (!comparison) notFound();
 
   const productIds = JSON.parse(comparison.product_ids || '[]');
-  const products = productIds.length
+  const rawProducts = productIds.length
     ? db.prepare(`
         SELECT p.*, b.name as brand_name, b.slug as brand_slug
         FROM products p LEFT JOIN brands b ON p.brand_id = b.id
@@ -28,6 +30,19 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
         benefits: JSON.parse(p.benefits || '[]'),
       }))
     : [];
+
+  // Fetch live prices for compared products
+  const products = await Promise.all(rawProducts.map(async (p: any) => {
+    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
+    let livePrice: number | null = null;
+    if (asin) {
+      try {
+        const priceData = await getLivePrice(asin);
+        livePrice = priceData.price;
+      } catch {}
+    }
+    return { ...p, live_price: livePrice };
+  }));
 
   return (
     <div className="max-w-content mx-auto px-4 sm:px-6 py-8">
@@ -43,15 +58,16 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
               <div key={p.id} className="border border-gray-100 rounded-lg p-5">
                 <p className="text-xs text-gray-400 uppercase mb-1">{p.brand_name}</p>
                 <h3 className="font-semibold text-accent mb-2">{p.name}</h3>
-                <p className="text-lg font-semibold mb-2">${p.current_price?.toFixed(2)}</p>
+                <p className="text-lg font-semibold mb-2">{p.live_price != null && p.live_price > 0 ? `$${p.live_price.toFixed(2)}` : 'Check price on Amazon'}</p>
                 <StarRating rating={p.rating} count={p.review_count} />
                 {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
                 {p.pros[0] && <p className="text-sm text-green-700 mt-2">+ {p.pros[0]}</p>}
                 {p.cons[0] && <p className="text-sm text-red-700 mt-1">− {p.cons[0]}</p>}
-                <Link href={`/go/${p.slug}`} target="_blank" rel="noopener noreferrer nofollow"
+                <Link href={`/go/${p.slug}`} target="_blank" rel="noopener noreferrer nofollow sponsored"
                   className="mt-4 inline-block px-5 py-2 bg-accent text-white text-sm rounded-md">
                   {p.cta_text || 'Check Price'}
                 </Link>
+                <PaidLinkTag className="mt-1" />
               </div>
             ))}
           </div>
@@ -74,7 +90,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                 </tr>
                 <tr className="border-t border-gray-100 bg-gray-50">
                   <td className="p-4 text-gray-500">Price</td>
-                  {products.map((p: any) => <td key={p.id} className="p-4 font-semibold">${p.current_price?.toFixed(2)}</td>)}
+                  {products.map((p: any) => <td key={p.id} className="p-4 font-semibold">{p.live_price != null && p.live_price > 0 ? `$${p.live_price.toFixed(2)}` : 'Check price on Amazon'}</td>)}
                 </tr>
                 <tr className="border-t border-gray-100">
                   <td className="p-4 text-gray-500">Rating</td>
@@ -96,10 +112,11 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                   <td className="p-4 text-gray-500">Action</td>
                   {products.map((p: any) => (
                     <td key={p.id} className="p-4">
-                      <Link href={`/go/${p.slug}`} target="_blank" rel="noopener noreferrer nofollow"
+                      <Link href={`/go/${p.slug}`} target="_blank" rel="noopener noreferrer nofollow sponsored"
                         className="inline-block px-4 py-2 bg-accent text-white text-xs rounded-md hover:bg-accent-light transition-colors">
                         {p.cta_text || 'Check Price'}
                       </Link>
+                      <PaidLinkTag className="mt-1" />
                     </td>
                   ))}
                 </tr>

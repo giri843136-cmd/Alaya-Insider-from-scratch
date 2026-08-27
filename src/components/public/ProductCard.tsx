@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import PaidLinkTag from './PaidLinkTag';
 
 interface Props { product: any; }
 
@@ -17,8 +18,30 @@ export function StarRating({ rating, count }: { rating: number; count: number })
   );
 }
 
+/** Render live price or "Check current price" fallback. Never show dummy prices. */
+function PriceDisplay({ product }: { product: any }) {
+  const hasLivePrice = product.live_price != null && product.live_price > 0;
+
+  if (hasLivePrice) {
+    return (
+      <div className="flex items-baseline gap-2 mt-2.5">
+        <span className="text-[15px] font-semibold text-accent">${product.live_price.toFixed(2)}</span>
+      </div>
+    );
+  }
+
+  // No live price — show fallback, never dummy data
+  return (
+    <div className="mt-2.5">
+      <span className="text-[12px] text-gray-400 italic">Check current price on Amazon</span>
+    </div>
+  );
+}
+
 export default function ProductCard({ product }: Props) {
   const p = product;
+  const hasAffiliate = (p.global_active && p.global_affiliate_url) || (p.india_active && p.india_affiliate_url);
+
   return (
     <Link href={`/product/${p.slug}`}
       className="group block bg-white rounded-[10px] overflow-hidden border border-gray-100 hover:border-gray-200 hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition-all duration-200">
@@ -40,14 +63,10 @@ export default function ProductCard({ product }: Props) {
         {p.brand_name && <p className="text-[10px] font-semibold text-warm uppercase tracking-[0.1em] mb-1.5">{p.brand_name}</p>}
         <h3 className="text-[13px] font-medium text-gray-800 line-clamp-2 leading-snug mb-2 group-hover:text-accent transition-colors">{p.name}</h3>
         <StarRating rating={p.rating} count={p.review_count} />
-        <div className="flex items-baseline gap-2 mt-2.5">
-          <span className="text-[15px] font-semibold text-accent">${p.current_price?.toFixed(2)}</span>
-          {p.previous_price && p.previous_price > p.current_price && (
-            <span className="text-xs text-gray-400 line-through">${p.previous_price.toFixed(2)}</span>
-          )}
-        </div>
+        <PriceDisplay product={p} />
         <div className="mt-3 pt-3 border-t border-gray-50">
           <span className="text-[12px] text-accent font-medium group-hover:underline">View Product →</span>
+          {hasAffiliate && <PaidLinkTag className="ml-1.5" />}
         </div>
       </div>
     </Link>
