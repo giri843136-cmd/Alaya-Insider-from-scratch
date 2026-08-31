@@ -20,10 +20,23 @@ export default function AdminProducts() {
     if (search) params.set('search', search);
     if (status) params.set('status', status);
 
-    const res = await adminFetch(`/api/products?${params}`);
-    const data = await res.json();
-    setProducts(data.products || []);
-    setPagination(data.pagination || { page: 1, totalPages: 1, total: 0 });
+    try {
+      const res = await adminFetch(`/api/products?${params}`);
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error('Products API returned non-JSON:', text.substring(0, 500));
+        data = {};
+      }
+      setProducts(data.products || []);
+      setPagination(data.pagination || { page: 1, totalPages: 1, total: 0 });
+    } catch (err) {
+      console.error('Failed to fetch products:', err);
+      setProducts([]);
+      setPagination({ page: 1, totalPages: 1, total: 0 });
+    }
     setLoading(false);
   }, [page, search, status]);
 

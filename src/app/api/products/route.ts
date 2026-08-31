@@ -10,6 +10,17 @@ export async function GET(req: NextRequest) {
   ensureDbReady();
   const db = getDb();
   const url = new URL(req.url);
+  const isAdmin = url.searchParams.get('admin') === 'true';
+
+  // Build response with no-cache headers for admin queries to prevent reverse proxy caching
+  const jsonResponse = (data: any, status = 200) => {
+    const res = NextResponse.json(data, { status });
+    if (isAdmin) {
+      res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.headers.set('Pragma', 'no-cache');
+    }
+    return res;
+  };
 
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
   const limit = Math.min(100, parseInt(url.searchParams.get('limit') || '20'));
@@ -25,7 +36,6 @@ export async function GET(req: NextRequest) {
   const minPrice = url.searchParams.get('min_price');
   const maxPrice = url.searchParams.get('max_price');
   const minRating = url.searchParams.get('min_rating');
-  const isAdmin = url.searchParams.get('admin') === 'true';
 
   let where = ['p.deleted_at IS NULL'];
   const params: any[] = [];
@@ -100,6 +110,10 @@ export async function GET(req: NextRequest) {
     ${whereClause}
   `).get(...params) as any;
 
+  if (isAdmin) {
+    console.log(`[PRODUCTS] Admin query: total=${countResult.total}, page=${page}, limit=${limit}`);
+  }
+
   const products = db.prepare(`
     SELECT p.*, b.name as brand_name, b.slug as brand_slug,
            c.name as category_name, c.slug as category_slug,
@@ -136,7 +150,7 @@ export async function GET(req: NextRequest) {
     };
   }));
 
-  return NextResponse.json({
+  return jsonResponse({
     products: enrichedProducts,
     pagination: {
       page,
@@ -203,10 +217,14 @@ export async function POST(req: NextRequest) {
     ];
     db.prepare(`INSERT INTO products (${cols.join(',')}) VALUES (${cols.map(()=>'?').join(',')})`).run(...vals);
 
-    // Create affiliate link
+    // Create affiliate link — use a unique slug to avoid UNIQUE constraint collisions
     if (data.affiliate_url) {
-      db.prepare(`INSERT INTO affiliate_links (id, product_id, slug, destination_url, marketplace, affiliate_network, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)`)
-        .run(uuid(), id, slug, data.affiliate_url, data.marketplace || '', data.affiliate_network || '');
+      try {
+        db.prepare(`INSERT INTO affiliate_links (id, product_id, slug, destination_url, marketplace, affiliate_network, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)`)
+          .run(uuid(), id, `link-${slug}`, data.affiliate_url, data.marketplace || '', data.affiliate_network || '');
+      } catch (linkErr: any) {
+        console.error('Affiliate link creation failed:', linkErr.message);
+      }
     }
 
     // Log
