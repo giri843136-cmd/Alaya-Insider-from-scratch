@@ -99,9 +99,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const fields: Record<string, any> = {
       name: data.name ?? existing.name,
       slug,
-      brand_id: data.brand_id ?? existing.brand_id,
-      category_id: data.category_id ?? existing.category_id,
-      subcategory_id: data.subcategory_id ?? existing.subcategory_id,
+      brand_id: data.brand_id || null,
+      category_id: data.category_id || null,
+      subcategory_id: data.subcategory_id || null,
       sku: data.sku ?? existing.sku,
       current_price: data.current_price ?? existing.current_price,
       previous_price: data.previous_price ?? existing.previous_price,
