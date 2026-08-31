@@ -288,9 +288,9 @@ export function seedAdmin() {
 
   const role = db.prepare("SELECT id FROM roles WHERE name = 'super_admin'").get() as any;
   if (!role) return;
-  db.prepare('INSERT INTO users (id, email, username, password_hash, first_name, last_name, role_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  db.prepare('INSERT OR IGNORE INTO users (id, email, username, password_hash, first_name, last_name, role_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(uuid(), 'Alayainsider@gmail.com', 'admin', bcryptjs.hashSync(seedPassword, 10), 'Alaya', 'Insider', role.id);
-  console.log('Admin user created: Alayainsider@gmail.com');
+  console.log('Admin user created (or already exists): Alayainsider@gmail.com');
 }
 
 export function seedHomepageSections() {
