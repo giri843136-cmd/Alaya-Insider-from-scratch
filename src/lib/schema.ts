@@ -267,7 +267,7 @@ export function seedRoles() {
     { name: 'content_manager', permissions: JSON.stringify({ articles: true, products_content: true }) },
     { name: 'analyst', permissions: JSON.stringify({ analytics: true }) },
   ];
-  const stmt = db.prepare('INSERT INTO roles (id, name, permissions) VALUES (?, ?, ?)');
+  const stmt = db.prepare('INSERT OR IGNORE INTO roles (id, name, permissions) VALUES (?, ?, ?)');
   for (const r of roles) stmt.run(uuid(), r.name, r.permissions);
 }
 
@@ -308,7 +308,7 @@ export function seedHomepageSections() {
     { key: 'destinations', title: 'Shop Where It Works Best for You', content: '{"subtitle":"Choose the shopping experience that matches your location.","global_heading":"Shop Worldwide","global_desc":"One smart link takes you to the Amazon store available in your region.","global_cta":"Explore Global Options","india_heading":"Shop in India","india_desc":"Explore local availability and pricing through our India shopping experience.","india_cta":"Explore India"}', order: 8 },
     { key: 'newsletter', title: 'Get the Good Finds First', content: '{"subtitle":"One useful email with curated products, shopping guides and new discoveries.","cta_text":"Join Free"}', order: 9 },
   ];
-  const stmt = db.prepare('INSERT INTO homepage_sections (id, section_key, title, content, sort_order, is_visible) VALUES (?, ?, ?, ?, ?, 1)');
+  const stmt = db.prepare('INSERT OR IGNORE INTO homepage_sections (id, section_key, title, content, sort_order, is_visible) VALUES (?, ?, ?, ?, ?, 1)');
   for (const s of sections) stmt.run(uuid(), s.key, s.title, s.content, s.order);
 }
 
@@ -342,7 +342,7 @@ export function seedSettings() {
     { key: 'dest_section_desc', value: 'Pick the shopping experience that works best for you.', group: 'destinations' },
     { key: 'dest_disclaimer', value: 'Prices, availability and regional selection may vary.', group: 'destinations' },
   ];
-  const stmt = db.prepare('INSERT INTO site_settings (key, value, group_name) VALUES (?, ?, ?)');
+  const stmt = db.prepare('INSERT OR IGNORE INTO site_settings (key, value, group_name) VALUES (?, ?, ?)');
   for (const s of settings) stmt.run(s.key, s.value, s.group);
 }
 
@@ -359,7 +359,7 @@ export function seedHeroSlides() {
     { eyebrow: 'SMART LIVING', headline: 'Useful Tech Without the Noise', description: 'Practical gadgets and everyday upgrades selected with purpose.', primary_cta_label: 'Explore Tech', primary_cta_url: '/category/electronics', secondary_cta_label: '', secondary_cta_url: '', bg: '#edf0f5', layout: 'text-left' },
   ];
 
-  const s = db.prepare(`INSERT INTO hero_slides (id, eyebrow, headline, description, primary_cta_label, primary_cta_url, secondary_cta_label, secondary_cta_url, background_color, layout, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`);
+  const s = db.prepare(`INSERT OR IGNORE INTO hero_slides (id, eyebrow, headline, description, primary_cta_label, primary_cta_url, secondary_cta_label, secondary_cta_url, background_color, layout, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`);
   slides.forEach((sl, i) => s.run(uuid(), sl.eyebrow, sl.headline, sl.description, sl.primary_cta_label, sl.primary_cta_url, sl.secondary_cta_label, sl.secondary_cta_url, sl.bg, sl.layout, i));
 
   // Hero settings
@@ -374,7 +374,7 @@ export function seedArticleCategories() {
   const db = getDb();
   if ((db.prepare('SELECT COUNT(*) as cnt FROM article_categories').get() as any).cnt > 0) return;
   const cats = ['Buying Guides', 'Product Reviews', 'Comparisons', 'How To', 'Trends', 'Ideas', 'Inspiration'];
-  const stmt = db.prepare('INSERT INTO article_categories (id, name, slug) VALUES (?, ?, ?)');
+  const stmt = db.prepare('INSERT OR IGNORE INTO article_categories (id, name, slug) VALUES (?, ?, ?)');
   for (const c of cats) stmt.run(uuid(), c, c.toLowerCase().replace(/\s+/g, '-'));
 }
 
@@ -387,6 +387,6 @@ export function seedPages() {
     { slug: 'terms', title: 'Terms of Service', content: '<h2>Terms of Service</h2><p>By using Alaya Insider, you agree to these terms.</p><p>This is a template. Please review and customize with legal counsel before launching.</p>' },
     { slug: 'cookie-policy', title: 'Cookie Policy', content: '<h2>Cookie Policy</h2><p>We use cookies to improve your experience on our site.</p><p>This is a template. Please review and customize with legal counsel before launching.</p>' },
   ];
-  const stmt = db.prepare('INSERT INTO pages (id, slug, title, content) VALUES (?, ?, ?, ?)');
+  const stmt = db.prepare('INSERT OR IGNORE INTO pages (id, slug, title, content) VALUES (?, ?, ?, ?)');
   for (const p of pages) stmt.run(uuid(), p.slug, p.title, p.content);
 }
