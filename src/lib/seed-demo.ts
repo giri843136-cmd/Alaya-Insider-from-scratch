@@ -63,7 +63,7 @@ export function seedDemoData() {
       { name: 'Outdoor Living', slug: 'outdoor-living', desc: 'Step outside' },
     ]},
   ];
-  const catStmt = db.prepare('INSERT INTO categories (id, name, slug, description, parent_id, is_featured, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const catStmt = db.prepare('INSERT OR IGNORE INTO categories (id, name, slug, description, parent_id, is_featured, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
   let catOrder = 0;
   for (const cat of catData) {
     const pid = uuid(); categories[cat.slug] = pid;
@@ -81,7 +81,7 @@ export function seedDemoData() {
     { name: 'Bang & Olufsen', slug: 'bang-olufsen', desc: 'Danish luxury electronics' },
     { name: 'Away', slug: 'away', desc: 'Modern travel essentials' },
   ];
-  const brandStmt = db.prepare('INSERT INTO brands (id, name, slug, description, is_featured) VALUES (?, ?, ?, ?, 1)');
+  const brandStmt = db.prepare('INSERT OR IGNORE INTO brands (id, name, slug, description, is_featured) VALUES (?, ?, ?, ?, 1)');
   for (const b of brandData) { const id = uuid(); brands[b.slug] = id; brandStmt.run(id, b.name, b.slug, b.desc); }
 
   // Products with dual destinations
@@ -109,7 +109,7 @@ export function seedDemoData() {
     { name: 'Muji Ultrasonic Humidifier', slug: 'muji-ultrasonic-humidifier', brand: 'muji', cat: 'home', subcat: 'decor', price: 79, prev: 89, rating: 4.4, reviews: 1567, desc: 'Quiet ultrasonic humidifier in signature minimal white.', why: 'Reliable, quiet, and visually unobtrusive.', bestFor: 'Those who want effective humidification', benefits: ['Ultra-quiet','Auto shut-off','Adjustable mist'], pros: ['Very quiet','Clean design','Effective output'], cons: ['Small tank','No humidity sensor'], featured: 0, trending: 0, editors: 0 },
   ];
 
-  const prodStmt = db.prepare(`INSERT INTO products (id, name, slug, brand_id, category_id, subcategory_id,
+  const prodStmt = db.prepare(`INSERT OR IGNORE INTO products (id, name, slug, brand_id, category_id, subcategory_id,
     current_price, previous_price, rating, review_count, short_description, why_we_recommend, best_for,
     benefits, pros, cons, status, is_featured, is_trending, is_editors_pick,
     global_affiliate_url, global_affiliate_network, global_cta_label, global_active,
@@ -118,7 +118,7 @@ export function seedDemoData() {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?,
     ?, ?, ?, 1, ?, ?, ?, 1, ?, ?, ?, ?, datetime('now'))`);
 
-  const linkStmt = db.prepare('INSERT INTO affiliate_links (id, product_id, slug, destination_url, destination_type, affiliate_network, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)');
+  const linkStmt = db.prepare('INSERT OR IGNORE INTO affiliate_links (id, product_id, slug, destination_url, destination_type, affiliate_network, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)');
 
   for (const p of productData) {
     const id = uuid();
@@ -137,8 +137,8 @@ export function seedDemoData() {
   }
 
   // Collections
-  const collStmt = db.prepare('INSERT INTO collections (id, name, slug, description, is_active, sort_order) VALUES (?, ?, ?, ?, 1, ?)');
-  const cpStmt = db.prepare('INSERT INTO collection_products (collection_id, product_id, sort_order) VALUES (?, ?, ?)');
+  const collStmt = db.prepare('INSERT OR IGNORE INTO collections (id, name, slug, description, is_active, sort_order) VALUES (?, ?, ?, ?, 1, ?)');
+  const cpStmt = db.prepare('INSERT OR IGNORE INTO collection_products (collection_id, product_id, sort_order) VALUES (?, ?, ?)');
   [
     { name: 'Quiet Luxury', slug: 'quiet-luxury', desc: 'Understated quality for everyday living.' },
     { name: 'Small Space Living', slug: 'small-space-living', desc: 'Smart products for compact spaces.' },
@@ -154,14 +154,14 @@ export function seedDemoData() {
   const rvCat = artCats.find((c: any) => c.slug === 'product-reviews');
   const trCat = artCats.find((c: any) => c.slug === 'trends');
   const admin = db.prepare('SELECT id FROM users LIMIT 1').get() as any;
-  const artStmt = db.prepare(`INSERT INTO articles (id, title, slug, subtitle, category_id, author_id, content, excerpt, reading_time, status, is_featured, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, datetime('now'))`);
+  const artStmt = db.prepare(`INSERT OR IGNORE INTO articles (id, title, slug, subtitle, category_id, author_id, content, excerpt, reading_time, status, is_featured, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, datetime('now'))`);
 
   artStmt.run(uuid(), 'The Best Kitchen Essentials for 2024', 'best-kitchen-essentials-2024', 'A practical guide to outfitting your kitchen', bgCat?.id, admin?.id, '<p>A well-equipped kitchen does not require dozens of specialized tools.</p><h2>Our Top Picks</h2><p>After researching dozens of products, these are the kitchen essentials we recommend most confidently.</p>', 'A practical guide to kitchen tools worth investing in.', 8, 1);
   artStmt.run(uuid(), 'Honest Review: Aesop Skincare Range', 'aesop-skincare-review', 'Is the premium price justified?', rvCat?.id, admin?.id, '<p>Aesop has built a reputation for sophisticated skincare. But at premium prices, is it worth it?</p><h2>The Verdict</h2><p>The products genuinely perform well.</p>', 'A three-month test of Aesop bestsellers.', 6, 0);
   artStmt.run(uuid(), 'Smart Home Products Worth Your Attention', 'smart-home-products-2024', 'Technology that actually improves daily life', trCat?.id, admin?.id, '<p>Not every smart home product is worth buying. Here are the ones that genuinely earn their place.</p>', 'Smart home products that actually improve daily routines.', 5, 0);
 
   // Comparisons
-  const compStmt = db.prepare("INSERT INTO comparisons (id, title, slug, description, product_ids, status) VALUES (?, ?, ?, ?, ?, 'published')");
+  const compStmt = db.prepare("INSERT OR IGNORE INTO comparisons (id, title, slug, description, product_ids, status) VALUES (?, ?, ?, ?, ?, 'published')");
   const p1 = products.find(p => p.slug === 'bang-olufsen-beoplay-h95');
   const p2 = products.find(p => p.slug === 'bang-olufsen-beoplay-ex');
   const p3 = products.find(p => p.slug === 'le-creuset-dutch-oven');
@@ -170,7 +170,7 @@ export function seedDemoData() {
   if (p3 && p4) compStmt.run(uuid(), 'Le Creuset Dutch Oven vs Skillet', 'le-creuset-dutch-oven-vs-skillet', 'Two iconic pieces compared', JSON.stringify([p3.id, p4.id]));
 
   // Sample clicks
-  const clickStmt = db.prepare('INSERT INTO affiliate_clicks (id, product_id, destination_type, source_page, device, clicked_at) VALUES (?, ?, ?, ?, ?, ?)');
+  const clickStmt = db.prepare('INSERT OR IGNORE INTO affiliate_clicks (id, product_id, destination_type, source_page, device, clicked_at) VALUES (?, ?, ?, ?, ?, ?)');
   const devices = ['desktop', 'mobile', 'tablet'];
   const dests = ['global', 'india'];
   for (let i = 0; i < 15; i++) {
@@ -180,7 +180,7 @@ export function seedDemoData() {
   }
 
   // Subscribers
-  const subStmt = db.prepare('INSERT INTO newsletter_subscribers (id, email, first_name, source) VALUES (?, ?, ?, ?)');
+  const subStmt = db.prepare('INSERT OR IGNORE INTO newsletter_subscribers (id, email, first_name, source) VALUES (?, ?, ?, ?)');
   subStmt.run(uuid(), 'reader@example.com', 'Alex', 'homepage');
   subStmt.run(uuid(), 'shopper@example.com', 'Jordan', 'product_page');
 
