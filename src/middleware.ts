@@ -15,7 +15,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Apply to all public pages
-    '/((?!api|admin|_next/static|_next/image|favicon.ico).*)',
+    // Apply to ALL pages including admin — prevents CDN from caching stale error pages
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 };
