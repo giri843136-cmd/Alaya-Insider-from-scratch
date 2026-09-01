@@ -17,6 +17,12 @@ export default function GlobalError({
             <p className="text-gray-500 mb-8">
               The site encountered an error. Please try again.
             </p>
+            {error?.message && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-left">
+                <p className="text-xs font-mono text-red-600 break-all whitespace-pre-wrap">{error.message}</p>
+                {error?.digest && <p className="text-xs text-red-400 mt-1">Digest: {error.digest}</p>}
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 onClick={() => reset()}
