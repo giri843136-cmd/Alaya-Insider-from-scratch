@@ -223,8 +223,8 @@ function LoginForm({ onSuccess }: { onSuccess: (user: AuthUser) => void }) {
         <form onSubmit={handleSubmit} className="bg-white border border-gray-100 rounded-lg p-6 shadow-sm">
           <div className="mb-4">
             <label className="text-sm font-medium text-gray-700 mb-1 block">Email or Username</label>
-            <input type="text" value={email} onChange={e => setEmail(e.target.value)} required
-              autoComplete="off"
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              autoComplete="new-email"
               className="w-full px-3 py-2.5 border border-gray-200 rounded-md text-sm focus:outline-none focus:border-accent"
               placeholder="Enter your email" />
           </div>
@@ -236,7 +236,7 @@ function LoginForm({ onSuccess }: { onSuccess: (user: AuthUser) => void }) {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-md text-sm focus:outline-none focus:border-accent pr-16"
                 placeholder="••••••••"
               />
