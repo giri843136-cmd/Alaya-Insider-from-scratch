@@ -18,9 +18,14 @@ export default function Error({
       <div className="text-center max-w-md">
         <p className="text-6xl font-semibold text-gray-200 mb-4">!</p>
         <h1 className="text-2xl font-semibold text-accent mb-3">Something went wrong</h1>
-        <p className="text-gray-500 mb-8">
+        <p className="text-gray-500 mb-4">
           An unexpected error occurred. Please try again.
         </p>
+        {error?.message && (
+          <p className="text-xs text-red-400 mb-4 break-all bg-red-50 p-2 rounded">
+            {error.message}
+          </p>
+        )}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={() => reset()}
