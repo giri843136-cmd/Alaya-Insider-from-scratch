@@ -187,7 +187,10 @@ Fallback mode is always one click away and is safe/compliant:
    - Database: `data/backups/alaya-dualstore-20260904-144753.db` (pre-migration)
      and `data/backups/alaya-backup-20260904-131421.db` (original India build)
      (restore: `cp data/backups/alaya-dualstore-20260904-144753.db data/alaya.db` then restart)
-   - Code: this repo (commit `8a75c26` is the pre-dual-store HEAD).
+   - Code: this repo — commit `4950381` is the pre-dual-store HEAD (India-only;
+     `8a75c26` is the same code one commit earlier) and commit `3bda9a0` is the
+     dual-store build. Undo a bad deploy by checking out / reverting to
+     `4950381` and redeploying.
 
 ---
 
