@@ -212,7 +212,7 @@ if (changed === 0) { console.log('Nothing to do.'); process.exit(0); }
 
 const backupsDir = path.resolve(process.cwd(), './data/backups');
 fs.mkdirSync(backupsDir, { recursive: true });
-const stamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+const stamp = new Date().toISOString().split('T').join('').split('-').join('').split(':').join('').split('.').join('').slice(0, 14);
 const backupFile = path.join(backupsDir, `alaya-amazonlinks-${stamp}.db`);
 fs.copyFileSync(dbPath, backupFile);
 console.log(`Backup written: ${backupFile}`);

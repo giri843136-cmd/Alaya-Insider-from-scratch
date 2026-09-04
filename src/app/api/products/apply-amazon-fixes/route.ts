@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/alaya.db');
     const backupsDir = path.join(path.dirname(dbPath), 'backups');
     fs.mkdirSync(backupsDir, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+    const stamp = new Date().toISOString().split('T').join('').split('-').join('').split(':').join('').split('.').join('').slice(0, 14);
     const backupFile = path.join(backupsDir, `alaya-amazonlinks-admin-${stamp}.db`);
     try {
       fs.copyFileSync(dbPath, backupFile);
