@@ -169,12 +169,33 @@ for their local marketplace.
    ```bash
    node scripts/install-geolite2.js --license-key=XXXXXXXX
    ```
+   (the installer also accepts `MAXMIND_LICENSE_KEY` in `.env`)
 4. Restart the app (`pm2 restart <app>`). No code changes — `src/lib/geo.ts`
    picks the file up on the first request.
 
 Verify with a real IP: `curl -s -H 'x-forwarded-for: 1.2.3.4' …` is dev-only;
 simplest is the smoke-test header `x-test-geo: DE|US|IN` on a dev build, or a
 VPN test in production.
+
+### Monthly auto-refresh (recommended)
+
+MaxMind publishes weekly; a monthly refresh is plenty. The DB swap is
+atomic and failure-safe — a failed download leaves the previous `.mmdb`
+untouched and the endpoint never throws.
+
+1. Add `MAXMIND_LICENSE_KEY=<your key>` to `.env` on the server (needed only
+   for the refresh; the one-off installer can use the flag instead).
+2. In the same cron-job.org account as the price refresh, add a second job:
+   ```
+   URL:    https://alayainsider.com/api/cron/geolite2
+   Method: POST
+   Header: x-cron-secret: <CRON_SECRET from .env>
+   Every:  monthly (1st of the month is fine)
+   ```
+3. Response: `ok:true` + new file size/build date on success;
+   `skipped:true` when the license key is unset; `502` with a reason on
+   failure (the old DB is kept). The running process serves the DB it loaded
+   at boot — the new file is picked up on the next restart/redeploy.
 
 ---
 
