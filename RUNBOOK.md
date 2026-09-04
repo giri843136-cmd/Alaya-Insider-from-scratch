@@ -63,13 +63,19 @@ Associates account is approved:
 4. Click **Run connection test** with three amazon.com ASINs (clothing /
    handbag / watch). Dummy keys → `invalid_client` = plumbing OK.
 5. Products need a **US ASIN**. Set it per product in Admin → Products →
-   Affiliate → **US Shopping (amazon.com)** URL field. ⚠️ The seeded
-   `global_affiliate_url` / `affiliate_url` .com links are **not** valid US
-   listings — they reused each product's amazon.in ASIN, which 404s (or maps
-   to the wrong product) on amazon.com. Run `node scripts/fix-us-links.js`
-   on the server (dry-run first, then `--apply`; it backs up the DB) to
-   write the 16 verified amazon.com ASINs and neutralize the 4 products with
-   no US listing, or enter the URLs by hand in the editor.
+   Affiliate → **US Shopping (amazon.com)** URL field. ⚠️ **The seeded
+   ASINs are not valid on either marketplace.** A 2026-09-04 live audit found
+   the catalog reused one fabricated ASIN string per product: 19/20 return
+   404 on amazon.in (1 maps to a different product) and 18/20 return 404 on
+   amazon.com (2 map to different products). Run `node scripts/fix-amazon-links.js`
+   on the server (dry-run first, then `--apply`; it backs up the DB) to write
+   the 12 verified amazon.in ASINs + 16 verified amazon.com ASINs and
+   neutralize the 4 products with no US listing. Products with **no genuine
+   amazon.in listing** (MUJI items, Away toiletry bag, Aesop Reverence Hand
+   Balm — printed by the script as a REVIEW list) keep their dead India CTA
+   until you decide editorially: find a real listing, or unpublish/rewrite
+   the product. To source a listing for a new product run
+   `node scripts/find-in-listing.js "Product Name"`.
 6. US visitors now see $ prices + amazon.com links with `alayainsider-20`.
    Products without a US listing fall back to the .in price/link automatically.
    Once GeoLite2 is installed (below), the same .com default serves every
