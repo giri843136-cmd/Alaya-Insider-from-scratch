@@ -98,6 +98,18 @@ amazon.in / amazon.com URLs automatically (`alayainsider-21` / `-20`).
 ASINs were invalid on both marketplaces (see the audit note in “Adding the US
 store later”). Endpoint: `POST /api/products/import` (admin auth).
 
+### One-click fix for the existing (broken) catalog — no server terminal needed
+
+Admin → **Import CSV** → “Existing catalog — apply verified link fixes”:
+**Preview fixes** (dry run) then **Apply verified link fixes**. The endpoint
+`POST /api/products/apply-amazon-fixes` (admin auth) runs on the server, so it
+updates the **live database** directly — no SSH/hPanel terminal required. It
+backs up `data/alaya.db` to `data/backups/` first, writes the 12 verified
+amazon.in ASINs + 16 verified amazon.com ASINs, neutralizes the 4 with no US
+listing, archives the 4 with no listing on either store, and drafts the 4
+.com-only products. Equivalent to the terminal script
+`scripts/fix-amazon-links.js --unpublish-noin --apply`.
+
 ## Installing OneLink in admin
 
 OneLink rewrites Amazon anchors for the **9 secondary marketplaces** to each

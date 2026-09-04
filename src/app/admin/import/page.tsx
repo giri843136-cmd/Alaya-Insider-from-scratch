@@ -19,6 +19,7 @@ export default function AdminImport() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const [result, setResult] = useState<{ imported: number; failed: number; unknownColumns: string[]; rows: RowResult[] } | null>(null);
+  const [fixResult, setFixResult] = useState<any>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 4000); };
 
@@ -85,6 +86,74 @@ export default function AdminImport() {
           {busy ? 'Importing…' : 'Import products'}
         </button>
         {toast && <span className="text-sm text-gray-600">{toast}</span>}
+      </div>
+
+      <div className="border border-gray-100 rounded-lg p-5 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700">Existing catalog — apply verified link fixes</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            The seeded ASINs are invalid on both marketplaces (live audit, 2026-09-04). This applies the
+            verified amazon.in/com ASINs to the existing products, neutralizes the 4 with no US listing, and
+            archives/drafts the 8 products with no amazon.in listing. Backs up the database first.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const res = await adminFetch('/api/products/apply-amazon-fixes', { method: 'POST', body: JSON.stringify({ dryRun: true }) });
+                const data = await res.json();
+                setResult(null);
+                setFixResult(data);
+                showToast(data?.error || `Preview: ${data.changed} change${data.changed === 1 ? '' : 's'} ready to apply`);
+              } finally { setBusy(false); }
+            }}
+            disabled={busy}
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm disabled:opacity-50"
+          >
+            Preview fixes
+          </button>
+          <button
+            onClick={async () => {
+              if (!window.confirm('Apply verified link fixes to the existing catalog? A database backup is taken first.')) return;
+              setBusy(true);
+              try {
+                const res = await adminFetch('/api/products/apply-amazon-fixes', { method: 'POST', body: JSON.stringify({}) });
+                const data = await res.json();
+                setFixResult(data);
+                showToast(data?.error || `Applied ${data.changed} fixes${data.backup ? ` · backup ${data.backup}` : ''}`);
+              } finally { setBusy(false); }
+            }}
+            disabled={busy}
+            className="px-3 py-2 bg-accent text-white rounded-md text-sm font-medium disabled:opacity-50"
+          >
+            Apply verified link fixes
+          </button>
+        </div>
+        {fixResult && (
+          <div className="text-sm text-gray-700">
+            <p className="mb-1">
+              {fixResult.dryRun ? 'Preview — nothing written.' : `Applied ${fixResult.changed} changes.`}
+              {fixResult.backup ? ` Backup: ${fixResult.backup}` : ''}
+              {fixResult.message ? ` ${fixResult.message}` : ''}
+            </p>
+            {fixResult.outcomes?.some((o: any) => !o.action.startsWith('ok')) && (
+              <table className="w-full text-xs border border-gray-100 rounded-lg overflow-hidden mt-2">
+                <thead className="bg-gray-50 text-left text-gray-500"><tr><th className="px-2 py-1">Slug</th><th className="px-2 py-1">Action</th><th className="px-2 py-1">Detail</th></tr></thead>
+                <tbody>
+                  {fixResult.outcomes.filter((o: any) => !o.action.startsWith('ok')).map((o: any) => (
+                    <tr key={o.slug + o.action} className="border-t border-gray-100">
+                      <td className="px-2 py-1">{o.slug}</td>
+                      <td className="px-2 py-1">{o.action}</td>
+                      <td className="px-2 py-1 text-gray-500">{o.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
 
       {result && (
