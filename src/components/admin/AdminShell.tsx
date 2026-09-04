@@ -39,26 +39,25 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
 
   useEffect(() => {
-    const token = getAuthToken();
-
-    if (!token) {
-      setView('login');
-      return;
-    }
-
-    setView('ready');
-
-    fetch('/api/auth/me', {
-      headers: { 'Authorization': `Bearer ${token}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.user) {
-          setUser(data.user);
-        }
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Boot outside the effect's synchronous phase (React 19 lint: no sync
+    // setState in effects) — resolves on the next microtask, same as before.
+    const boot = async () => {
+      await Promise.resolve();
+      const token = getAuthToken();
+      if (!token) {
+        setView('login');
+        return;
+      }
+      setView('ready');
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = res.ok ? await res.json() : null;
+      if (data?.user) {
+        setUser(data.user);
+      }
+    };
+    void boot();
   }, []);
 
   const onLoginSuccess = (authUser: AuthUser) => {

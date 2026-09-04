@@ -139,7 +139,7 @@ export default function AdminSettings() {
               <div className="bg-white p-3 rounded-lg inline-block mb-3 border">
                 <img src={twoFaSetup.qr} alt="2FA QR Code" className="w-[200px] h-[200px]" />
               </div>
-              <p className="text-xs text-gray-600 mb-1">Can't scan? Enter this key manually: <code className="bg-white px-2 py-0.5 rounded border text-xs">{twoFaSetup.secret}</code></p>
+              <p className="text-xs text-gray-600 mb-1">Can&apos;t scan? Enter this key manually: <code className="bg-white px-2 py-0.5 rounded border text-xs">{twoFaSetup.secret}</code></p>
               <div className="flex items-center gap-2 mt-3">
                 <input type="text" placeholder="Enter 6-digit code" value={twoFaCode} onChange={e => setTwoFaCode(e.target.value)}
                   className="px-3 py-2 border border-gray-200 rounded-md text-sm w-40" />

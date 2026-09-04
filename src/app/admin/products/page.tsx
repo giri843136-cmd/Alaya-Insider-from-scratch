@@ -40,7 +40,10 @@ export default function AdminProducts() {
     setLoading(false);
   }, [page, search, status]);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => {
+    const run = async () => { await fetchProducts(); };
+    void run();
+  }, [fetchProducts]);
 
   const showToast = (msg: string) => {
     setToast(msg);

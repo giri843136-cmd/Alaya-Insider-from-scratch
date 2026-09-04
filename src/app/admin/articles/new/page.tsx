@@ -1,9 +1,18 @@
 'use client';
 import { adminFetch } from '@/lib/admin-auth-context';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import slugify from 'slugify';
+
+// Editorial article categories (no dedicated articles-categories table).
+const ARTICLE_CATEGORIES = [
+  { id: '', name: 'Buying Guides', slug: 'buying-guides' },
+  { id: '', name: 'Product Reviews', slug: 'product-reviews' },
+  { id: '', name: 'Comparisons', slug: 'comparisons' },
+  { id: '', name: 'How To', slug: 'how-to' },
+  { id: '', name: 'Trends', slug: 'trends' },
+];
 
 export default function NewArticle() {
   const [form, setForm] = useState({
@@ -11,29 +20,10 @@ export default function NewArticle() {
     category_id: '', status: 'draft', is_featured: false, reading_time: 0,
     seo_title: '', seo_description: '',
   });
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories] = useState<any[]>(ARTICLE_CATEGORIES);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const router = useRouter();
-
-  useEffect(() => {
-    adminFetch('/api/articles?admin=true&limit=0').catch(() => {});
-    // Fetch article categories from a simple endpoint
-    adminFetch('/api/categories?flat=true').catch(() => {});
-  }, []);
-
-  // We need article categories - let's fetch them properly
-  useEffect(() => {
-    adminFetch('/api/articles?limit=1').then(r => r.json()).catch(() => {});
-    // Hardcode article categories for now - they come from seed
-    setCategories([
-      { id: '', name: 'Buying Guides', slug: 'buying-guides' },
-      { id: '', name: 'Product Reviews', slug: 'product-reviews' },
-      { id: '', name: 'Comparisons', slug: 'comparisons' },
-      { id: '', name: 'How To', slug: 'how-to' },
-      { id: '', name: 'Trends', slug: 'trends' },
-    ]);
-  }, []);
 
   const handleSave = async () => {
     if (!form.title) return;

@@ -1,18 +1,53 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
+
+// The cookie-consent value lives in localStorage, which is external to React.
+// useSyncExternalStore is the sanctioned way to subscribe to it without
+// setting state synchronously inside an effect (React 19 lint) and without
+// hydration mismatches (the server snapshot is always null).
+const listeners = new Set<() => void>();
+// In-memory fallback so the banner still dismisses for the session when
+// localStorage is blocked (incognito restrictions etc.).
+let memoryConsent: string | null = null;
+
+function subscribe(callback: () => void): () => void {
+  listeners.add(callback);
+  window.addEventListener('storage', callback);
+  return () => {
+    listeners.delete(callback);
+    window.removeEventListener('storage', callback);
+  };
+}
+
+function getConsent(): string | null {
+  if (memoryConsent) return memoryConsent;
+  try {
+    return window.localStorage.getItem('cookie-consent');
+  } catch {
+    return memoryConsent;
+  }
+}
+
+function notify() {
+  for (const cb of listeners) cb();
+}
 
 export default function CookieConsent() {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const consent = localStorage.getItem('cookie-consent');
-    if (!consent) setVisible(true);
-  }, []);
+  // visible = no stored consent yet. Any stored value ('accepted') hides it,
+  // matching the original behaviour.
+  const visible = useSyncExternalStore(
+    subscribe,
+    () => getConsent() === null,
+    () => true, // server snapshot: never stored a consent yet → banner visible
+  );
 
   const accept = () => {
-    localStorage.setItem('cookie-consent', 'accepted');
-    setVisible(false);
+    try {
+      window.localStorage.setItem('cookie-consent', 'accepted');
+    } catch { /* storage blocked — fall back to the in-memory flag below */ }
+    memoryConsent = 'accepted';
+    notify();
   };
 
   if (!visible) return null;

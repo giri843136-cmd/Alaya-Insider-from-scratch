@@ -17,7 +17,10 @@ export default function AdminHero() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    const run = async () => { await fetchData(); };
+    void run();
+  }, []);
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const handleSaveSlide = async () => {

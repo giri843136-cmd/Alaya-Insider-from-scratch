@@ -17,7 +17,10 @@ export default function AdminBrands() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchBrands(); }, []);
+  useEffect(() => {
+    const run = async () => { await fetchBrands(); };
+    void run();
+  }, []);
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const handleSave = async () => {

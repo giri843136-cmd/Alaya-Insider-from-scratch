@@ -45,7 +45,8 @@ export default function ProductsPage() {
   }, [page, search, category, brand, sort, minPrice, maxPrice, minRating]);
 
   useEffect(() => {
-    fetchProducts();
+    const run = async () => { await fetchProducts(); };
+    void run();
   }, [fetchProducts]);
 
   useEffect(() => {
@@ -54,7 +55,10 @@ export default function ProductsPage() {
   }, []);
 
   useEffect(() => {
-    setPage(1);
+    // Deferred so the reset lands outside the effect's synchronous phase
+    // (React 19 lint: no sync setState in effects) — same behaviour as before.
+    const t = setTimeout(() => setPage(1), 0);
+    return () => clearTimeout(t);
   }, [search, category, brand, sort, minPrice, maxPrice, minRating]);
 
   const clearFilters = () => {

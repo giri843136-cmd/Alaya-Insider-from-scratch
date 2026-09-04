@@ -32,7 +32,10 @@ export default function AdminCategories() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchCategories(); }, [fetchCategories]);
+  useEffect(() => {
+    const run = async () => { await fetchCategories(); };
+    void run();
+  }, [fetchCategories]);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 

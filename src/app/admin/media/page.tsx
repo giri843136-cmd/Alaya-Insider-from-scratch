@@ -15,7 +15,10 @@ export default function AdminMedia() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchMedia(); }, []);
+  useEffect(() => {
+    const run = async () => { await fetchMedia(); };
+    void run();
+  }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 

@@ -14,13 +14,17 @@ function SearchContent() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (query.length >= 2) {
+    if (query.length < 2) return;
+    // Deferred so loading lands outside the effect's synchronous phase (React
+    // 19 lint: no sync setState in effects) — same behaviour as before.
+    const t = setTimeout(() => {
       setLoading(true);
       fetch(`/api/search?q=${encodeURIComponent(query)}`)
         .then(r => r.json())
         .then(d => { setResults(d); setLoading(false); })
         .catch(() => setLoading(false));
-    }
+    }, 0);
+    return () => clearTimeout(t);
   }, [query]);
 
   return (
