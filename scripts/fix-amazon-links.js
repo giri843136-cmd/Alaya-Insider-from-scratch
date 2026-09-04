@@ -21,13 +21,12 @@
  *   - US_NEUTRALIZE (4): products with no amazon.com listing — clears
  *     us_affiliate_url and points the legacy .com fallbacks at the .in link so
  *     international visitors never hit a dead amazon.com page.
- *
- * The remaining products (see REVIEW list at the bottom, printed by this
- * script) have NO genuine amazon.in listing — MUJI left the Indian market,
- * Away's toiletry bag isn't sold there, and Aesop's Reverence Hand Balm isn't
- * stocked on amazon.in. Their .in CTA is dead today and needs an editorial
- * decision (repoint at a real listing, or unpublish/rewrite the product) — this
- * script deliberately does NOT guess a substitute product for them.
+ *   - With --unpublish-noin: takes the remaining 8 products (no genuine
+ *     amazon.in listing — MUJI left the Indian market, Away's toiletry bag and
+ *     Aesop's Reverence Hand Balm aren't sold there) off the live site:
+ *       ARCHIVE (4)  — no listing on EITHER marketplace: set status 'archived'
+ *       DRAFT   (4)  — valid .com but no .in: set status 'draft' (kept for a
+ *                      future international angle)
  *
  * Safe by default: --apply is required to write. Before writing it copies the
  * database to data/backups/alaya-amazonlinks-<timestamp>.db. Idempotent.
@@ -99,6 +98,23 @@ const REVIEW_NO_IN_LISTING = [
 
 const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/alaya.db');
 const apply = process.argv.includes('--apply');
+const unpublish = process.argv.includes('--unpublish-noin');
+
+// Products with no amazon.in listing and no amazon.com listing → archive.
+const ARCHIVE_NO_LISTING = [
+  'muji-cotton-bed-sheets',
+  'muji-travel-organizer-set',
+  'muji-led-desk-lamp',
+  'muji-ultrasonic-humidifier',
+];
+
+// Products with a valid amazon.com listing but no amazon.in listing → draft.
+const DRAFT_COM_ONLY = [
+  'muji-aroma-diffuser',
+  'muji-stainless-steel-tumbler',
+  'away-toiletry-bag',
+  'aesop-reverence-hand-balm',
+];
 
 if (!fs.existsSync(dbPath)) {
   console.error(`Database not found at ${dbPath}`);
@@ -122,7 +138,7 @@ function currentUsAsin(row) {
 }
 
 const rows = db.prepare(
-  `SELECT slug, name, india_affiliate_url, affiliate_url, global_affiliate_url, us_affiliate_url
+  `SELECT slug, name, status, india_affiliate_url, affiliate_url, global_affiliate_url, us_affiliate_url, archived_at
    FROM products WHERE deleted_at IS NULL`
 ).all();
 const bySlug = new Map(rows.map(r => [r.slug, r]));
@@ -151,15 +167,33 @@ for (const slug of US_NEUTRALIZE) {
   if (!cur && !legacyCom) plan.push({ slug, name: row.name, action: 'ok (us neutralized)', cur: null, want: null });
   else plan.push({ slug, name: row.name, action: 'neutralize .com → .in fallback', cur, want: null });
 }
+if (unpublish) {
+  for (const slug of ARCHIVE_NO_LISTING) {
+    const row = bySlug.get(slug);
+    if (!row) { console.warn(`skip (not in DB): ${slug}`); continue; }
+    if (row.status === 'archived') plan.push({ slug, name: row.name, action: 'ok (archived)', cur: row.status, want: 'archived' });
+    else plan.push({ slug, name: row.name, action: 'archive (no listing on either store)', cur: row.status, want: 'archived' });
+  }
+  for (const slug of DRAFT_COM_ONLY) {
+    const row = bySlug.get(slug);
+    if (!row) { console.warn(`skip (not in DB): ${slug}`); continue; }
+    if (row.status === 'draft') plan.push({ slug, name: row.name, action: 'ok (draft)', cur: row.status, want: 'draft' });
+    else plan.push({ slug, name: row.name, action: 'draft (.com only — no amazon.in)', cur: row.status, want: 'draft' });
+  }
+}
 
-console.log(`DB: ${dbPath}   mode: ${apply ? 'APPLY' : 'DRY RUN (use --apply to write)'}\n`);
+console.log(`DB: ${dbPath}   mode: ${apply ? 'APPLY' : 'DRY RUN (use --apply to write)'}${unpublish ? '   + unpublish no-.in products' : ''}\n`);
 let changed = 0;
 for (const p of plan) {
   const flag = p.action.startsWith('ok') ? '  ' : '→ ';
   const show = p.action.includes('.in') || p.action === 'ok (in set)'
     ? (asinOf(p.want) || (p.cur && asinOf(p.cur)) || '—')
     : String(p.cur || '—');
-  console.log(`${flag}${p.slug.padEnd(34)} ${p.action} ${p.action.startsWith('ok') ? '' : '→ ' + (p.want ? asinOf(p.want) : '(cleared)')}`);
+  const tail = p.action.startsWith('ok') ? ''
+    : /^[A-Z0-9]{10}$/.test(String(p.want || '')) ? `→ ${p.want}`
+    : (p.action.startsWith('archive') || p.action.startsWith('draft')) ? `→ ${p.want}`
+    : '→ (cleared)';
+  console.log(`${flag}${p.slug.padEnd(34)} ${p.action} ${tail}`);
   if (!p.action.startsWith('ok')) changed++;
 }
 console.log(`\n${plan.length} products checked, ${changed} to change.`);
@@ -193,10 +227,12 @@ const tx = db.transaction(() => {
         global_affiliate_url = CASE WHEN global_affiliate_url LIKE '%amazon.com%' THEN india_affiliate_url ELSE global_affiliate_url END,
         updated_at = datetime('now')
     WHERE slug = ?`);
+  const setStatus = db.prepare(`UPDATE products SET status = ?, archived_at = CASE WHEN ? = 'archived' THEN datetime('now') ELSE archived_at END, updated_at = datetime('now') WHERE slug = ?`);
   for (const p of plan) {
     if (p.action === 'set .in URL') setIn.run(p.want, p.slug);
     else if (p.action === 'set .com URL') setUs.run(p.want, p.slug);
     else if (p.action === 'neutralize .com → .in fallback') neutralizeUs.run(p.slug);
+    else if (p.action === 'archive (no listing on either store)' || p.action === 'draft (.com only — no amazon.in)') setStatus.run(p.want, p.want, p.slug);
   }
 });
 tx();
