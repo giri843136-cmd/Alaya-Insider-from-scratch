@@ -11,6 +11,11 @@ npm run build
 npm run start
 ```
 
+> **Live Amazon.in prices** use the Amazon Creators API (PA-API 5.0 was retired
+> by Amazon in May 2026). Enter credentials at `Admin → Amazon API`, cache is
+> 1 hour with "as of" stamps, and an hourly cron hits `/api/cron/amazon-prices`.
+> Full runbook: [RUNBOOK.md](./RUNBOOK.md). Tests: `npm test`.
+
 ## Admin Panel
 
 **URL:** `/admin`
@@ -42,6 +47,9 @@ Copy `.env.example` to `.env` and configure:
 | `SMTP_USER` | SMTP username | No |
 | `SMTP_PASS` | SMTP password | No |
 | `NEXT_PUBLIC_ANALYTICS_ID` | Google Analytics ID | No |
+| `CREATORS_CLIENT_ID` / `CREATORS_CLIENT_SECRET` / `CREATORS_VERSION` | Amazon Creators API credentials (amazon.in) — see [RUNBOOK.md](./RUNBOOK.md). Prefer Admin → Amazon API (secret stored encrypted in DB) | No |
+| `CREATORS_PARTNER_TAG` | Amazon.in tag, e.g. `alayainsider-21` | No |
+| `CRON_SECRET` | Secret for hourly refresh cron (`POST /api/cron/amazon-prices`) | No |
 
 ## Persistent Storage
 

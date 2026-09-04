@@ -179,6 +179,16 @@ export function initializeDatabase() {
       key TEXT PRIMARY KEY, value TEXT DEFAULT '', group_name TEXT DEFAULT 'general',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    -- Amazon Creators API price cache (India marketplace).
+    -- ok=1 payload cached 1h (Amazon hourly-refresh policy), ok=0 failures 60s.
+    CREATE TABLE IF NOT EXISTS amazon_price_cache (
+      asin TEXT PRIMARY KEY,
+      ok INTEGER NOT NULL DEFAULT 0,
+      payload TEXT NOT NULL DEFAULT '{}',
+      error_code TEXT DEFAULT '',
+      error_message TEXT DEFAULT '',
+      fetched_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS menus (
       id TEXT PRIMARY KEY, location TEXT NOT NULL, items TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))

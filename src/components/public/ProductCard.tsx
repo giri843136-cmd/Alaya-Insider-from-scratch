@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import PaidLinkTag from './PaidLinkTag';
+import { formatLiveAmount } from '@/lib/price-format';
 
 interface Props { product: any; }
 
@@ -18,14 +19,14 @@ export function StarRating({ rating, count }: { rating: number; count: number })
   );
 }
 
-/** Render live price or "Check current price" fallback. Never show dummy prices. */
+/** Render live Amazon.in price (INR) or "Check current price" fallback. Never show dummy data. */
 function PriceDisplay({ product }: { product: any }) {
   const hasLivePrice = product.live_price != null && product.live_price > 0;
 
   if (hasLivePrice) {
     return (
       <div className="flex items-baseline gap-2 mt-2.5">
-        <span className="text-[15px] font-semibold text-accent">${product.live_price.toFixed(2)}</span>
+        <span className="text-[15px] font-semibold text-accent">{formatLiveAmount(product.live_price, product.live_currency)}</span>
       </div>
     );
   }

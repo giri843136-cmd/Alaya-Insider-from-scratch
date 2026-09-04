@@ -6,7 +6,8 @@ import ProductCard, { StarRating } from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
 import ProductCTA from './ProductCTA';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
-import { getLivePrice, extractAsin } from '@/lib/amazon-price';
+import { getLivePrice, productIndiaAsin, enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { formatLiveAmount, asOfLabel } from '@/lib/price-format';
 import type { Metadata } from 'next';
 
 export const revalidate = 120; // Cache product pages 2 minutes
@@ -32,33 +33,15 @@ async function getProduct(slug: string) {
     } catch { return fallback; }
   };
 
-  // Fetch live price from Amazon Creators API
-  const asin = extractAsin(product.global_affiliate_url || product.affiliate_url || '') || product.sku;
-  let livePrice: number | null = null;
-  if (asin) {
-    try {
-      const priceData = await getLivePrice(asin);
-      livePrice = priceData.price;
-    } catch {
-      // Live price fetch failed — will show fallback UI
-    }
-  }
+  // Fetch live Amazon.in price via the Creators API (1h cache; graceful fallback)
+  const mainAsin = productIndiaAsin(product);
+  const live = mainAsin ? await getLivePrice(mainAsin) : null;
 
   const related = db.prepare(`SELECT p.*, b.name as brand_name, c.name as category_name FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id
     WHERE p.category_id = ? AND p.id != ? AND p.status = 'published' AND p.deleted_at IS NULL LIMIT 4`).all(product.category_id, product.id);
 
-  // Fetch live prices for related products
-  const relatedWithPrices = await Promise.all(related.map(async (rp: any) => {
-    const rpAsin = extractAsin(rp.global_affiliate_url || rp.affiliate_url || '') || rp.sku;
-    let rpLivePrice: number | null = null;
-    if (rpAsin) {
-      try {
-        const rpPriceData = await getLivePrice(rpAsin);
-        rpLivePrice = rpPriceData.price;
-      } catch {}
-    }
-    return { ...rp, live_price: rpLivePrice };
-  }));
+  // Fetch live prices for related products (one batched round-trip)
+  const relatedWithPrices = await enrichProductsWithLivePrice(related as any[]);
 
   return {
     product: {
@@ -68,7 +51,10 @@ async function getProduct(slug: string) {
       cons: safeParse(product.cons),
       tags: safeParse(product.tags),
       specifications: safeParse(product.specifications, {}),
-      live_price: livePrice,
+      live_price: live?.price ?? null,
+      live_currency: live?.currency ?? null,
+      live_fetched_at: live?.fetchedAt ?? null,
+      live_available: !!live?.available,
     },
     related: relatedWithPrices,
   };
@@ -117,12 +103,16 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <div className="mb-4"><StarRating rating={product.rating} count={product.review_count} /></div>
           <div className="flex items-baseline gap-3 mb-2">
             {product.live_price != null && product.live_price > 0 ? (
-              <span className="text-2xl font-semibold text-accent">${product.live_price.toFixed(2)}</span>
+              <span className="text-2xl font-semibold text-accent">{formatLiveAmount(product.live_price, product.live_currency)}</span>
             ) : (
               <span className="text-lg text-gray-400 italic">Check current price on Amazon</span>
             )}
           </div>
-          <p className="text-[11px] text-gray-400 mb-6">Prices shown are for reference and may vary. Click the shopping button below to see the latest price on Amazon.</p>
+          {product.live_price != null && product.live_price > 0 && product.live_fetched_at ? (
+            <p className="text-[11px] text-gray-400 mb-6">{asOfLabel(product.live_fetched_at)} · Live price from Amazon.in, refreshed hourly. Price &amp; availability may change.</p>
+          ) : (
+            <p className="text-[11px] text-gray-400 mb-6">Prices shown are for reference and may vary. Click the shopping button below to see the latest price on Amazon.</p>
+          )}
 
           {!isAvailable && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
@@ -202,8 +192,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         "@context": "https://schema.org", "@type": "Product", "name": product.name,
         "description": product.short_description,
         "brand": product.brand_name ? { "@type": "Brand", "name": product.brand_name } : undefined,
-        "offers": { "@type": "Offer", "price": product.live_price ?? product.current_price, "priceCurrency": product.currency || "USD",
-          "availability": isAvailable ? "https://schema.org/InStock" : "https://schema.org/OutOfStock" },
+        // Offer block is emitted ONLY when we have a real price (live Amazon.in
+        // price, else the editorial reference price). When API data is unavailable
+        // the price fields are cleanly omitted — invalid/empty offers are worse.
+        ...(product.live_price != null && product.live_price > 0 ? {
+          "offers": {
+            "@type": "Offer", "price": product.live_price, "priceCurrency": product.live_currency || "INR",
+            "availability": "https://schema.org/InStock",
+            "url": product.india_affiliate_url || undefined,
+          },
+        } : (product.current_price > 0 ? {
+          "offers": { "@type": "Offer", "price": product.current_price, "priceCurrency": product.currency || "USD",
+            "availability": isAvailable ? "https://schema.org/InStock" : "https://schema.org/OutOfStock" },
+        } : {})),
         ...(product.rating > 0 && product.review_count > 0 ? { "aggregateRating": { "@type": "AggregateRating", "ratingValue": product.rating, "reviewCount": product.review_count } } : {}),
       })}} />
     </div>

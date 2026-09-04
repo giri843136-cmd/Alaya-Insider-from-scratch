@@ -5,7 +5,7 @@ import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import ProductCard from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
-import { getLivePrice, extractAsin } from '@/lib/amazon-price';
+import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 import type { Metadata } from 'next';
 
 export const revalidate = 120; // Cache category pages 2 minutes
@@ -106,18 +106,8 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     ORDER BY p.is_featured DESC, p.created_at DESC
   `).all(category.id, category.id, category.id) as any[];
 
-  // Enrich products with live prices
-  const enrichedProducts = await Promise.all(products.map(async (p: any) => {
-    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
-    let livePrice: number | null = null;
-    if (asin) {
-      try {
-        const priceData = await getLivePrice(asin);
-        livePrice = priceData.price;
-      } catch {}
-    }
-    return { ...p, live_price: livePrice };
-  }));
+  // Enrich products with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
+  const enrichedProducts = await enrichProductsWithLivePrice(products as any[]);
 
   // JSON-LD breadcrumb
   const breadcrumbItems = [

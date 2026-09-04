@@ -5,7 +5,7 @@ import ProductCard from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
 import HeroCarousel from '@/components/public/HeroCarousel';
 import CategoryShowcase from '@/components/public/CategoryShowcase';
-import { getLivePrice, extractAsin } from '@/lib/amazon-price';
+import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 
 export const revalidate = 60; // Cache homepage for 60 seconds to reduce DB hits
 
@@ -41,20 +41,8 @@ async function getHomeData() {
   const heroSettings: Record<string, string> = {};
   (db.prepare('SELECT key, value FROM hero_settings').all() as any[]).forEach((s: any) => { heroSettings[s.key] = s.value; });
 
-  // Enrich products with live prices
-  async function enrichWithPrices(items: any[]) {
-    return Promise.all(items.map(async (p: any) => {
-      const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
-      let livePrice: number | null = null;
-      if (asin) {
-        try {
-          const priceData = await getLivePrice(asin);
-          livePrice = priceData.price;
-        } catch {}
-      }
-      return { ...p, live_price: livePrice };
-    }));
-  }
+  // Enrich products with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
+  const enrichWithPrices = (items: any[]) => enrichProductsWithLivePrice(items);
 
   const [enrichedTrending, enrichedEditorsPicks, enrichedPopular] = await Promise.all([
     enrichWithPrices(trending as any[]),

@@ -1,235 +1,252 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Live Amazon.in price lookups now run through the Amazon Creators API
+ * (PA-API 5.0 retired 2026-05-15). These tests mock the OAuth token endpoint
+ * and the creatorsapi.amazon GetItems endpoint to verify:
+ *   - happy path: real price/currency returned and cached for 1h
+ *   - graceful failure: invalid credentials / invalid ASINs / out-of-stock
+ *     items NEVER throw and always yield a price:null fallback
+ *   - caching: one network round-trip per ASIN per hour; failure windows 60s
+ *   - batching: getLivePrices chunks ≤10 ASINs per GetItems call
+ */
 
-// ─── Mocks ──────────────────────────────────────────────────────────────────
-// MockgetDb must be set before importing the module under test
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
-const mockRun = jest.fn();
-const mockPrepare = jest.fn(() => ({ run: mockRun }));
+let dbPath = '';
+let mod: any;
+let dbGet: any;
+let fetchMock: jest.Mock;
 
-jest.mock('../db', () => ({
-  __esModule: true,
-  default: () => ({ prepare: mockPrepare }),
-}));
+const TOKEN_URL = 'https://api.amazon.co.uk/auth/o2/token';
+const API_URL = 'https://creatorsapi.amazon/catalog/v1/getItems';
 
-// Capture fetch calls
-const mockFetch = jest.fn();
-(global as any).fetch = mockFetch;
-
-// Mock AbortSignal.timeout (not available in Node 18 test env)
-if (typeof (AbortSignal as any).timeout !== 'function') {
-  (AbortSignal as any).timeout = (_ms: number) => new AbortController().signal;
+function jsonResponse(body: any, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-import { getLivePrice, getLivePrices } from '../amazon-price';
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-function mockAmazonPage(priceHtml: string, status = 200) {
-  mockFetch.mockResolvedValueOnce({
-    ok: status >= 200 && status < 300,
-    status,
-    text: () => Promise.resolve(priceHtml),
-  });
+/** Configurable fake Amazon backend. */
+function installFetch(backend: {
+  tokenStatus?: number;
+  tokenBody?: any;
+  getItemsStatus?: number;
+  getItemsBody?: any;
+  failNetwork?: boolean;
+}) {
+  fetchMock = jest.fn(async (input: any) => {
+    const url = String(input);
+    if (backend.failNetwork) throw new TypeError('fetch failed');
+    if (url.includes('/auth/o2/token')) {
+      return jsonResponse(backend.tokenBody ?? {}, backend.tokenStatus ?? 200);
+    }
+    if (url.includes('creatorsapi.amazon')) {
+      return jsonResponse(backend.getItemsBody ?? {}, backend.getItemsStatus ?? 200);
+    }
+    return jsonResponse({}, 404);
+  }) as any;
+  (global as any).fetch = fetchMock;
 }
 
-function mockAmazonFailure(error: Error) {
-  mockFetch.mockRejectedValueOnce(error);
+function sampleItem(asin: string, overrides: any = {}) {
+  return {
+    asin,
+    detailPageURL: `https://www.amazon.in/dp/${asin}?tag=alayainsider-21`,
+    images: { primary: { large: { url: `https://m.media-amazon.com/images/I/${asin}._SL500_.jpg` } } },
+    itemInfo: { title: { displayValue: `Product ${asin}` }, byLineInfo: { brand: { displayValue: 'TestBrand' } } },
+    offersV2: {
+      listings: [{
+        availability: { type: 'IN_STOCK' },
+        condition: { value: 'New' },
+        isBuyBoxWinner: true,
+        merchantInfo: { name: 'Amazon.in' },
+        price: { money: { amount: 1299.5, currency: 'INR', displayAmount: '₹1,299.50' } },
+      }],
+    },
+    ...overrides,
+  };
 }
 
-function mockAmazonUnavailable() {
-  mockFetch.mockResolvedValueOnce({
-    ok: true,
-    status: 200,
-    text: () => Promise.resolve('<div>Currently unavailable</div>'),
-  });
-}
+const goodToken = { access_token: 'tok-test-123', token_type: 'bearer', expires_in: 3600 };
 
-function mockAmazonNoPrice() {
-  mockFetch.mockResolvedValueOnce({
-    ok: true,
-    status: 200,
-    text: () => Promise.resolve('<html><body>No price here</body></html>'),
-  });
-}
+beforeAll(async () => {
+  dbPath = path.join(os.tmpdir(), `alaya-test-${Date.now()}.db`);
+  process.env.DATABASE_PATH = dbPath;
+  process.env.AUTH_SECRET = 'test-auth-secret-0123456789abcdef0123456789abcdef';
+  process.env.CREATORS_CLIENT_ID = 'amzn1.test.client';
+  process.env.CREATORS_CLIENT_SECRET = 'test-secret';
+  process.env.CREATORS_VERSION = '3.2';
+  process.env.CREATORS_PARTNER_TAG = 'alayainsider-21';
+  process.env.CREATORS_MARKETPLACE = 'www.amazon.in';
 
-// ─── Tests ──────────────────────────────────────────────────────────────────
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  // Clear the module-level priceCache by re-importing
-  // We do this by resetting modules so the cache Map is fresh
-  jest.resetModules();
+  mod = await import('../amazon-price');
+  dbGet = (await import('../db')).default;
+  dbGet().exec(`CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY, value TEXT DEFAULT '', group_name TEXT DEFAULT 'general',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );`);
 });
 
-// Re-import after module reset to get a fresh priceCache
-async function freshGetLivePrice(asin: string) {
-  const mod = await import('../amazon-price');
-  return mod.getLivePrice(asin);
-}
+afterEach(() => {
+  fetchMock?.mockClear();
+  // Reset token cache + price cache between tests so earlier tests can't leak.
+  try {
+    dbGet().prepare('DELETE FROM site_settings WHERE key IN (?,?)').run('creators_access_token', 'creators_token_expires_at');
+    dbGet().prepare('DELETE FROM amazon_price_cache').run();
+  } catch { /* ignore */ }
+});
 
-async function freshGetLivePrices(asins: string[]) {
-  const mod = await import('../amazon-price');
-  return mod.getLivePrices(asins);
-}
+afterAll(() => {
+  try { fs.unlinkSync(dbPath); } catch { /* ignore */ }
+});
 
-describe('getLivePrice', () => {
-  it('returns null price for empty ASIN', async () => {
-    const result = await freshGetLivePrice('');
-    expect(result).toEqual({ price: null, currency: 'USD', available: false });
-    expect(mockFetch).not.toHaveBeenCalled();
+describe('productIndiaAsin', () => {
+  it('prefers the amazon.in affiliate URL', () => {
+    const p = {
+      global_affiliate_url: 'https://www.amazon.com/dp/B08N5WRWNW?tag=x-20',
+      india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH?tag=alayainsider-21',
+      affiliate_url: 'https://www.amazon.com/dp/B08N5WRWNW',
+    };
+    expect(mod.productIndiaAsin(p)).toBe('B0ABCDEFGH');
   });
 
-  it('fetches and extracts price from a-price-whole pattern', async () => {
-    mockAmazonPage('<span class="a-price-whole">29</span><span class="a-price-fraction">99</span>');
-
-    const result = await freshGetLivePrice('B08N5WRWNW');
-    expect(result.price).toBe(29);
-    expect(result.currency).toBe('USD');
-    expect(result.available).toBe(true);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('amazon.com/dp/B08N5WRWNW'),
-      expect.objectContaining({ headers: expect.any(Object) })
-    );
-  });
-
-  it('fetches and extracts price from priceAmount JSON pattern', async () => {
-    mockAmazonPage('{"priceAmount":49.99,"currency":"USD"}');
-
-    const result = await freshGetLivePrice('B09V3KXJPB');
-    expect(result.price).toBe(49.99);
-    expect(result.available).toBe(true);
-  });
-
-  it('fetches and extracts price from a-offscreen pattern', async () => {
-    mockAmazonPage('<span class="a-offscreen">$199.00</span>');
-
-    const result = await freshGetLivePrice('B07XJ8C8F5');
-    expect(result.price).toBe(199);
-    expect(result.available).toBe(true);
-  });
-
-  it('returns null for unavailable product', async () => {
-    mockAmazonUnavailable();
-
-    const result = await freshGetLivePrice('B00UNAVAILABLE');
-    expect(result.price).toBeNull();
-    expect(result.available).toBe(false);
-  });
-
-  it('returns null when no price found in HTML', async () => {
-    mockAmazonNoPrice();
-
-    const result = await freshGetLivePrice('B00NOPRICE');
-    expect(result.price).toBeNull();
-    expect(result.available).toBe(false);
-  });
-
-  it('returns null on HTTP error', async () => {
-    mockAmazonPage('', 404);
-
-    const result = await freshGetLivePrice('B00NOTFOUND');
-    expect(result.price).toBeNull();
-    expect(result.available).toBe(false);
-  });
-
-  it('returns null on network failure', async () => {
-    mockAmazonFailure(new Error('Network error'));
-
-    const result = await freshGetLivePrice('B00NETWORKERR');
-    expect(result.price).toBeNull();
-    expect(result.available).toBe(false);
-  });
-
-  it('uses cache on second call within TTL', async () => {
-    mockAmazonPage('<span class="a-price-whole">35</span>');
-
-    const first = await freshGetLivePrice('B08N5WRWNW');
-    expect(first.price).toBe(35);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    const second = await freshGetLivePrice('B08N5WRWNW');
-    expect(second.price).toBe(35);
-    // Fetch should NOT be called again (cache hit)
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('re-fetches after TTL expiry', async () => {
-    // First fetch
-    mockAmazonPage('<span class="a-price-whole">35</span>');
-    await freshGetLivePrice('B08N5WRWNW');
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    // Manually expire the cache by advancing time
-    // We can't easily access the private cache, so we re-import the module
-    // and manipulate the cache via a test helper
-    // Instead, test the isFresh logic by checking the cache entry age
-    // For this test, we'll verify the cache prevents duplicate fetches
-    // and trust the TTL logic tested via the isFresh function
-  });
-
-  it('fetches different ASINs independently', async () => {
-    mockAmazonPage('<span class="a-price-whole">10</span>');
-    mockAmazonPage('<span class="a-price-whole">20</span>');
-
-    const r1 = await freshGetLivePrice('B0000000001');
-    const r2 = await freshGetLivePrice('B0000000002');
-
-    expect(r1.price).toBe(10);
-    expect(r2.price).toBe(20);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-  });
-
-  it('attempts DB persistence (best-effort)', async () => {
-    mockAmazonPage('<span class="a-price-whole">55</span>');
-
-    await freshGetLivePrice('B08N5WRWNW');
-
-    // DB.prepare should have been called for cache persistence
-    expect(mockPrepare).toHaveBeenCalled();
-    expect(mockRun).toHaveBeenCalled();
+  it('uses legacy affiliate_url only when it points at amazon.in', () => {
+    expect(mod.productIndiaAsin({ affiliate_url: 'https://www.amazon.in/dp/B08N5WRWNW' })).toBe('B08N5WRWNW');
+    expect(mod.productIndiaAsin({ affiliate_url: 'https://www.amazon.com/dp/B08N5WRWNW' })).toBeNull();
+    expect(mod.productIndiaAsin({})).toBeNull();
+    expect(mod.productIndiaAsin(null)).toBeNull();
   });
 });
 
-describe('getLivePrices', () => {
-  it('fetches multiple ASINs in batches', async () => {
-    mockAmazonPage('<span class="a-price-whole">10</span>');
-    mockAmazonPage('<span class="a-price-whole">20</span>');
-    mockAmazonPage('<span class="a-price-whole">30</span>');
-    mockAmazonPage('<span class="a-price-whole">40</span>');
+describe('getLivePrice — happy path (dummy-free valid backend)', () => {
+  it('returns INR price + currency from the Creators API', async () => {
+    installFetch({
+      tokenBody: goodToken,
+      getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } },
+    });
 
-    const results = await freshGetLivePrices([
-      'B0000000001',
-      'B0000000002',
-      'B0000000003',
-      'B0000000004',
-    ]);
-
-    expect(results.size).toBe(4);
-    expect(results.get('B0000000001')?.price).toBe(10);
-    expect(results.get('B0000000004')?.price).toBe(40);
-    // 4 ASINs in batches of 3 = 2 batches, so 4 fetch calls
-    expect(mockFetch).toHaveBeenCalledTimes(4);
+    const live = await mod.getLivePrice('B0ABCDEFGH');
+    expect(live.price).toBe(1299.5);
+    expect(live.currency).toBe('INR');
+    expect(live.available).toBe(true);
+    expect(live.fetchedAt).toBeTruthy();
   });
 
-  it('returns empty map for empty input', async () => {
-    const results = await freshGetLivePrices([]);
-    expect(results.size).toBe(0);
-    expect(mockFetch).not.toHaveBeenCalled();
+  it('caches for one hour — second lookup does not hit the network', async () => {
+    installFetch({
+      tokenBody: goodToken,
+      getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } },
+    });
+
+    await mod.getLivePrice('B0ABCDEFGH');
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    const live = await mod.getLivePrice('B0ABCDEFGH');
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirst); // cache hit
+    expect(live.price).toBe(1299.5);
   });
 
-  it('handles mixed success/failure', async () => {
-    mockAmazonPage('<span class="a-price-whole">10</span>');
-    mockAmazonFailure(new Error('timeout'));
-    mockAmazonPage('<span class="a-price-whole">30</span>');
+  it('returns null for a malformed ASIN without calling the API', async () => {
+    installFetch({ tokenBody: goodToken });
+    const live = await mod.getLivePrice('not-an-asin');
+    expect(live.price).toBeNull();
+    expect(live.available).toBe(false);
+    expect(fetchMock.mock.calls.length).toBe(0);
+  });
+});
 
-    const results = await freshGetLivePrices([
-      'B0000000001',
-      'B0000000002',
-      'B0000000003',
+describe('getLivePrice — graceful failure (the dummy-key scenario)', () => {
+  it('invalid client credentials → OAuth error → price null, no throw', async () => {
+    installFetch({
+      tokenStatus: 400,
+      tokenBody: { error: 'invalid_client', error_description: 'Invalid client credentials' },
+    });
+
+    const live = await mod.getLivePrice('B0ABCDEFGH');
+    expect(live.price).toBeNull();
+    expect(live.available).toBe(false);
+    // Second call within the 60s failure window must NOT hammer the token endpoint.
+    await mod.getLivePrice('B0ABCDEFGH');
+    expect(fetchMock.mock.calls.filter((c: any) => String(c[0]).includes('/auth/o2/token')).length).toBe(1);
+  });
+
+  it('unreachable endpoint (network error) → price null, no throw', async () => {
+    installFetch({ failNetwork: true, tokenBody: goodToken });
+    const live = await mod.getLivePrice('B0ABCDEFGH');
+    expect(live.price).toBeNull();
+    expect(live.available).toBe(false);
+  });
+
+  it('ASIN not accessible on Amazon.in (ItemNotAccessible) → price null, no throw', async () => {
+    installFetch({
+      tokenBody: goodToken,
+      getItemsBody: {
+        errors: [{ code: 'ItemNotAccessible', message: 'The ItemId is not accessible through the Creators API.' }],
+        itemResults: { items: [] },
+      },
+    });
+    const live = await mod.getLivePrice('B0ZZZZZZZZ');
+    expect(live.price).toBeNull();
+    expect(live.available).toBe(false);
+  });
+
+  it('item exists but out of stock / no offer → price null (graceful), cached without error spam', async () => {
+    installFetch({
+      tokenBody: goodToken,
+      getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH', { offersV2: { listings: [] } })] } },
+    });
+    const live = await mod.getLivePrice('B0ABCDEFGH');
+    expect(live.price).toBeNull();
+    expect(live.available).toBe(false);
+  });
+});
+
+describe('getLivePrices — batching and enrichment', () => {
+  const makeItems = (count: number) => Array.from({ length: count }, (_, i) => sampleItem(`B0ASIN${String(i).padStart(4, '0')}`));
+
+  it('batches >10 ASINs into multiple GetItems calls and returns all results', async () => {
+    installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: makeItems(25) } } });
+    const asins = makeItems(25).map((i: any) => i.asin);
+    const map = await mod.getLivePrices(asins);
+    expect(map.size).toBe(25);
+    expect(fetchMock.mock.calls.filter((c: any) => String(c[0]).includes('creatorsapi.amazon')).length).toBe(3);
+    const first = map.get('B0ASIN0000');
+    expect(first.price).toBe(1299.5);
+  });
+
+  it('enrichProductsWithLivePrice attaches live_price/live_currency/live_fetched_at to every row', async () => {
+    installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } } });
+    const products = [
+      { id: '1', name: 'A', india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH' },
+      { id: '2', name: 'B', india_affiliate_url: '' }, // no India ASIN → fallback fields
+    ];
+    const enriched = await mod.enrichProductsWithLivePrice(products);
+    expect(enriched[0].live_price).toBe(1299.5);
+    expect(enriched[0].live_currency).toBe('INR');
+    expect(enriched[0].live_available).toBe(true);
+    expect(enriched[1].live_price).toBeNull();
+    expect(enriched[1].live_available).toBe(false);
+  });
+
+  it('force:true bypasses the cache and hits the network again', async () => {
+    installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } } });
+    await mod.getLivePrice('B0ABCDEFGH');
+    const before = fetchMock.mock.calls.length;
+    await mod.getLivePrices(['B0ABCDEFGH'], { force: true });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+  });
+});
+
+describe('enrichment with no credentials configured', () => {
+  it('no credentials → all products fall back cleanly, zero network calls', async () => {
+    delete process.env.CREATORS_CLIENT_ID;
+    delete process.env.CREATORS_CLIENT_SECRET;
+    installFetch({ tokenBody: goodToken });
+    const enriched = await mod.enrichProductsWithLivePrice([
+      { id: '1', india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH' },
     ]);
-
-    expect(results.get('B0000000001')?.price).toBe(10);
-    expect(results.get('B0000000002')?.price).toBeNull();
-    expect(results.get('B0000000003')?.price).toBe(30);
+    expect(enriched[0].live_price).toBeNull();
+    expect(enriched[0].live_currency).toBeNull();
+    expect(fetchMock.mock.calls.length).toBe(0);
+    process.env.CREATORS_CLIENT_ID = 'amzn1.test.client';
+    process.env.CREATORS_CLIENT_SECRET = 'test-secret';
   });
 });

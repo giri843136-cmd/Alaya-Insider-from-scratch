@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { v4 as uuid } from 'uuid';
-import { getLivePrice, extractAsin } from '@/lib/amazon-price';
+import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const rawProducts = db.prepare(`
     SELECT p.id, p.name, p.slug, p.current_price, p.primary_image, p.rating,
-           p.global_affiliate_url, p.affiliate_url, p.sku,
+           p.global_affiliate_url, p.india_affiliate_url, p.affiliate_url, p.sku,
            b.name as brand_name
     FROM products p
     LEFT JOIN brands b ON p.brand_id = b.id
@@ -25,18 +25,8 @@ export async function GET(req: NextRequest) {
     LIMIT 8
   `).all(s, s, s, s);
 
-  // Enrich with live prices
-  const products = await Promise.all(rawProducts.map(async (p: any) => {
-    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
-    let livePrice: number | null = null;
-    if (asin) {
-      try {
-        const priceData = await getLivePrice(asin);
-        livePrice = priceData.price;
-      } catch {}
-    }
-    return { ...p, live_price: livePrice };
-  }));
+  // Enrich with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
+  const products = await enrichProductsWithLivePrice(rawProducts as any[]);
 
   const articles = db.prepare(`
     SELECT id, title, slug, excerpt, featured_image

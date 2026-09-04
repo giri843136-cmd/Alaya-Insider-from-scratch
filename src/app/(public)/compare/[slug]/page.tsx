@@ -5,7 +5,10 @@ import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import { StarRating } from '@/components/public/ProductCard';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
-import { getLivePrice, extractAsin } from '@/lib/amazon-price';
+import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { formatLiveAmount } from '@/lib/price-format';
+
+const priceText = (p: any) => (p.live_price != null && p.live_price > 0 ? formatLiveAmount(p.live_price, p.live_currency) : 'Check price on Amazon');
 
 export const revalidate = 120; // Cache comparison pages 2 minutes
 
@@ -31,18 +34,8 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
       }))
     : [];
 
-  // Fetch live prices for compared products
-  const products = await Promise.all(rawProducts.map(async (p: any) => {
-    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
-    let livePrice: number | null = null;
-    if (asin) {
-      try {
-        const priceData = await getLivePrice(asin);
-        livePrice = priceData.price;
-      } catch {}
-    }
-    return { ...p, live_price: livePrice };
-  }));
+  // Fetch live Amazon.in prices for compared products (batched, 1h cache)
+  const products = await enrichProductsWithLivePrice(rawProducts);
 
   return (
     <div className="max-w-content mx-auto px-4 sm:px-6 py-8">
@@ -58,7 +51,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
               <div key={p.id} className="border border-gray-100 rounded-lg p-5">
                 <p className="text-xs text-gray-400 uppercase mb-1">{p.brand_name}</p>
                 <h3 className="font-semibold text-accent mb-2">{p.name}</h3>
-                <p className="text-lg font-semibold mb-2">{p.live_price != null && p.live_price > 0 ? `$${p.live_price.toFixed(2)}` : 'Check price on Amazon'}</p>
+                <p className="text-lg font-semibold mb-2">{priceText(p)}</p>
                 <StarRating rating={p.rating} count={p.review_count} />
                 {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
                 {p.pros[0] && <p className="text-sm text-green-700 mt-2">+ {p.pros[0]}</p>}
@@ -90,7 +83,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                 </tr>
                 <tr className="border-t border-gray-100 bg-gray-50">
                   <td className="p-4 text-gray-500">Price</td>
-                  {products.map((p: any) => <td key={p.id} className="p-4 font-semibold">{p.live_price != null && p.live_price > 0 ? `$${p.live_price.toFixed(2)}` : 'Check price on Amazon'}</td>)}
+                  {products.map((p: any) => <td key={p.id} className="p-4 font-semibold">{priceText(p)}</td>)}
                 </tr>
                 <tr className="border-t border-gray-100">
                   <td className="p-4 text-gray-500">Rating</td>

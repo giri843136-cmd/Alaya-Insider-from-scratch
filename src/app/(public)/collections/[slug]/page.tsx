@@ -3,7 +3,7 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import ProductCard from '@/components/public/ProductCard';
-import { getLivePrice, extractAsin } from '@/lib/amazon-price';
+import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 
 export const revalidate = 300; // Cache collection detail 5 minutes
 
@@ -24,18 +24,8 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     ORDER BY cp.sort_order
   `).all(collection.id);
 
-  // Enrich with live prices
-  const products = await Promise.all(rawProducts.map(async (p: any) => {
-    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
-    let livePrice: number | null = null;
-    if (asin) {
-      try {
-        const priceData = await getLivePrice(asin);
-        livePrice = priceData.price;
-      } catch {}
-    }
-    return { ...p, live_price: livePrice };
-  }));
+  // Enrich with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
+  const products = await enrichProductsWithLivePrice(rawProducts as any[]);
 
   return (
     <div className="max-w-content mx-auto px-4 sm:px-6 py-8">

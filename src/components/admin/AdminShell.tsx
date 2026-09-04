@@ -27,6 +27,7 @@ const navItems = [
   { href: '/admin/homepage', icon: '⌂', label: 'Homepage' },
   { href: '/admin/users', icon: '◉', label: 'Users' },
   { href: '/admin/activity', icon: '↻', label: 'Activity Log' },
+  { href: '/admin/amazon', icon: 'A', label: 'Amazon API' },
   { href: '/admin/settings', icon: '⚙', label: 'Settings' },
   { href: '/admin/system-health', icon: '♥', label: 'System Health' },
 ];

@@ -4,7 +4,7 @@ import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { v4 as uuid } from 'uuid';
 import slugify from 'slugify';
-import { getLivePrice, extractAsin } from '@/lib/amazon-price';
+import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -127,28 +127,19 @@ export async function GET(req: NextRequest) {
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
 
-  // Enrich products with live prices from Amazon API
-  const enrichedProducts = await Promise.all(products.map(async (p: any) => {
-    const asin = extractAsin(p.global_affiliate_url || p.affiliate_url || '') || p.sku;
-    let livePrice: number | null = null;
-    if (asin) {
-      try {
-        const priceData = await getLivePrice(asin);
-        livePrice = priceData.price;
-      } catch {}
-    }
-    return {
-      ...p,
-      live_price: livePrice,
-      benefits: JSON.parse(p.benefits || '[]'),
-      pros: JSON.parse(p.pros || '[]'),
-      cons: JSON.parse(p.cons || '[]'),
-      gallery_images: JSON.parse(p.gallery_images || '[]'),
-      tags: JSON.parse(p.tags || '[]'),
-      specifications: JSON.parse(p.specifications || '{}'),
-      additional_retailers: JSON.parse(p.additional_retailers || '[]'),
-    };
+  // Parse JSON fields first, then enrich with live Amazon.in prices in one
+  // batched API round-trip (cached 1 hour; graceful fallback when unavailable).
+  const parsed = products.map((p: any) => ({
+    ...p,
+    benefits: JSON.parse(p.benefits || '[]'),
+    pros: JSON.parse(p.pros || '[]'),
+    cons: JSON.parse(p.cons || '[]'),
+    gallery_images: JSON.parse(p.gallery_images || '[]'),
+    tags: JSON.parse(p.tags || '[]'),
+    specifications: JSON.parse(p.specifications || '{}'),
+    additional_retailers: JSON.parse(p.additional_retailers || '[]'),
   }));
+  const enrichedProducts = await enrichProductsWithLivePrice(parsed);
 
   return jsonResponse({
     products: enrichedProducts,
