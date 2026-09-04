@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
@@ -78,16 +79,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, changed: 0, outcomes, message: 'Nothing to change — fixes already applied.' });
     }
 
-    // Backup before writing (same folder the terminal script uses).
+    // Backup before writing (same folder the terminal script uses). If the
+    // data dir is not writable (read-only FS, missing perms), fall back to
+    // the OS temp dir so the apply can still proceed safely.
     const dbPath = path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/alaya.db');
-    const backupsDir = path.join(path.dirname(dbPath), 'backups');
-    fs.mkdirSync(backupsDir, { recursive: true });
     const stamp = new Date().toISOString().split('T').join('').split('-').join('').split(':').join('').split('.').join('').slice(0, 14);
-    const backupFile = path.join(backupsDir, `alaya-amazonlinks-admin-${stamp}.db`);
+    let backupFile: string;
     try {
+      const backupsDir = path.join(path.dirname(dbPath), 'backups');
+      fs.mkdirSync(backupsDir, { recursive: true });
+      backupFile = path.join(backupsDir, `alaya-amazonlinks-admin-${stamp}.db`);
       fs.copyFileSync(dbPath, backupFile);
     } catch (e: any) {
-      return NextResponse.json({ error: `Backup failed: ${e?.message}` }, { status: 500 });
+      const fallbackDir = os.tmpdir();
+      backupFile = path.join(fallbackDir, `alaya-amazonlinks-admin-${stamp}.db`);
+      try {
+        fs.copyFileSync(dbPath, backupFile);
+      } catch (e2: any) {
+        return NextResponse.json({ error: `Backup failed (data dir: ${e?.message}; temp dir: ${e2?.message})` }, { status: 500 });
+      }
     }
 
     const setIn = db.prepare(`UPDATE products SET india_affiliate_url = ?, updated_at = datetime('now') WHERE slug = ?`);
@@ -112,13 +122,17 @@ export async function POST(req: NextRequest) {
     });
     tx();
 
-    db.prepare('INSERT INTO activity_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(require('crypto').randomUUID(), user.id, 'applied_amazon_fixes', 'product', 'bulk',
-        `Applied ${plan.length} verified amazon link/status fixes (backup: ${path.basename(backupFile)})`);
+    try {
+      db.prepare('INSERT INTO activity_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(require('crypto').randomUUID(), user.id, 'applied_amazon_fixes', 'product', 'bulk',
+          `Applied ${plan.length} verified amazon link/status fixes (backup: ${path.basename(backupFile)})`);
+    } catch (e: any) {
+      console.error('apply-amazon-fixes activity_log insert failed (non-fatal):', e);
+    }
 
     return NextResponse.json({ ok: true, changed: plan.length, backup: path.basename(backupFile), outcomes });
   } catch (e: any) {
     console.error('apply-amazon-fixes error:', e);
-    return NextResponse.json({ error: 'Failed to apply fixes' }, { status: 500 });
+    return NextResponse.json({ error: `Failed to apply fixes: ${e?.message || e}` }, { status: 500 });
   }
 }
