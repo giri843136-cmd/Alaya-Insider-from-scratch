@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
+import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
@@ -7,10 +7,15 @@ import { StarRating } from '@/components/public/ProductCard';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 import { formatLiveAmount } from '@/lib/price-format';
+import { resolveVisitorStore } from '@/lib/geo';
 
+// Geo-aware rendering (visitor store) requires per-request evaluation.
+export const dynamic = 'force-dynamic';
+
+// Direct Amazon anchor for the store whose price is shown (OneLink-friendly —
+// never routed through /go/ so OneLink can rewrite for secondary markets).
+const ctaUrl = (p: any) => p.amazon_url || p.india_affiliate_url || '';
 const priceText = (p: any) => (p.live_price != null && p.live_price > 0 ? formatLiveAmount(p.live_price, p.live_currency) : 'Check price on Amazon');
-
-export const revalidate = 120; // Cache comparison pages 2 minutes
 
 export default async function ComparisonPage({ params }: { params: Promise<{ slug: string }> }) {
   ensureDbReady();
@@ -34,8 +39,10 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
       }))
     : [];
 
-  // Fetch live Amazon.in prices for compared products (batched, 1h cache)
-  const products = await enrichProductsWithLivePrice(rawProducts);
+  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  const hdrs = await headers();
+  const geo = resolveVisitorStore(hdrs);
+  const products = await enrichProductsWithLivePrice(rawProducts, geo.store);
 
   return (
     <div className="max-w-content mx-auto px-4 sm:px-6 py-8">
@@ -56,10 +63,11 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                 {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
                 {p.pros[0] && <p className="text-sm text-green-700 mt-2">+ {p.pros[0]}</p>}
                 {p.cons[0] && <p className="text-sm text-red-700 mt-1">− {p.cons[0]}</p>}
-                <Link href={`/go/${p.slug}`} target="_blank" rel="noopener noreferrer nofollow sponsored"
+                <a href={ctaUrl(p)} target="_blank" rel="noopener noreferrer nofollow sponsored"
+                  onClick={() => { try { fetch('/api/clicks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p.id, destination_type: p.live_store === 'us' ? 'global' : 'india', store: p.live_store || 'in' }) }); } catch {} }}
                   className="mt-4 inline-block px-5 py-2 bg-accent text-white text-sm rounded-md">
                   {p.cta_text || 'Check Price'}
-                </Link>
+                </a>
                 <PaidLinkTag className="mt-1" />
               </div>
             ))}
@@ -105,10 +113,11 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                   <td className="p-4 text-gray-500">Action</td>
                   {products.map((p: any) => (
                     <td key={p.id} className="p-4">
-                      <Link href={`/go/${p.slug}`} target="_blank" rel="noopener noreferrer nofollow sponsored"
+                      <a href={ctaUrl(p)} target="_blank" rel="noopener noreferrer nofollow sponsored"
+                        onClick={() => { try { fetch('/api/clicks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p.id, destination_type: p.live_store === 'us' ? 'global' : 'india', store: p.live_store || 'in' }) }); } catch {} }}
                         className="inline-block px-4 py-2 bg-accent text-white text-xs rounded-md hover:bg-accent-light transition-colors">
                         {p.cta_text || 'Check Price'}
-                      </Link>
+                      </a>
                       <PaidLinkTag className="mt-1" />
                     </td>
                   ))}

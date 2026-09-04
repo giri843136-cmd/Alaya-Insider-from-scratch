@@ -77,6 +77,12 @@ beforeAll(async () => {
   process.env.CREATORS_VERSION = '3.2';
   process.env.CREATORS_PARTNER_TAG = 'alayainsider-21';
   process.env.CREATORS_MARKETPLACE = 'www.amazon.in';
+  // US store credentials for dual-store tests.
+  process.env.CREATORS_US_CLIENT_ID = 'amzn1.us.test.client';
+  process.env.CREATORS_US_CLIENT_SECRET = 'us-test-secret';
+  process.env.CREATORS_US_VERSION = '3.1';
+  process.env.CREATORS_US_PARTNER_TAG = 'alayainsider-20';
+  process.env.CREATORS_US_MARKETPLACE = 'www.amazon.com';
 
   mod = await import('../amazon-price');
   dbGet = (await import('../db')).default;
@@ -222,8 +228,87 @@ describe('getLivePrices — batching and enrichment', () => {
     expect(enriched[0].live_price).toBe(1299.5);
     expect(enriched[0].live_currency).toBe('INR');
     expect(enriched[0].live_available).toBe(true);
+    expect(enriched[0].live_store).toBe('in');
+    expect(enriched[0].amazon_url).toContain('www.amazon.in');
+    expect(enriched[0].amazon_url).toContain('tag=');
     expect(enriched[1].live_price).toBeNull();
     expect(enriched[1].live_available).toBe(false);
+  });
+
+  it('same ASIN in two stores does not collide in the cache (per-store isolation)', async () => {
+    // The exact same ASIN string resolves to different products per store.
+    installFetch({
+      tokenBody: goodToken,
+      getItemsBody: { itemResults: { items: [
+        sampleItem('B0ABCDEFGH', { offersV2: { listings: [{ price: { money: { amount: 999.99, currency: 'USD', displayAmount: '$999.99' } }, availability: { type: 'IN_STOCK' }, condition: { value: 'New' }, isBuyBoxWinner: true, merchantInfo: { name: 'Amazon.com' } }] } }),
+      ] } },
+    });
+
+    // Seed the US cache with a USD price for the same ASIN string.
+    const usLive = await mod.getLivePrice('B0ABCDEFGH', 'us');
+    expect(usLive.price).toBe(999.99);
+    expect(usLive.currency).toBe('USD');
+
+    // India lookup for the same ASIN string must NOT return the US price.
+    installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } } });
+    const inLive = await mod.getLivePrice('B0ABCDEFGH', 'in');
+    expect(inLive.price).toBe(1299.5);
+    expect(inLive.currency).toBe('INR');
+  });
+
+  it('US store enrichment with a US ASIN returns USD and amazon.com links', async () => {
+    installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: [
+      sampleItem('B0USASIN01', { offersV2: { listings: [{ price: { money: { amount: 49.99, currency: 'USD', displayAmount: '$49.99' } }, availability: { type: 'IN_STOCK' }, condition: { value: 'New' }, isBuyBoxWinner: true, merchantInfo: { name: 'Amazon.com' } }] } }),
+    ] } } });
+    const products = [{ id: '1', name: 'A', india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH', us_affiliate_url: 'https://www.amazon.com/dp/B0USASIN01?tag=alayainsider-20' }];
+    const enriched = await mod.enrichProductsWithLivePrice(products, 'us');
+    expect(enriched[0].live_price).toBe(49.99);
+    expect(enriched[0].live_currency).toBe('USD');
+    expect(enriched[0].live_store).toBe('us');
+    expect(enriched[0].amazon_url).toContain('www.amazon.com');
+    expect(enriched[0].amazon_url).toContain('tag=');
+  });
+
+  it('US fails → India serves: no US listing falls back to the India price + .in link', async () => {
+    // US GetItems returns nothing for the product (no US listing on amazon.com).
+    installFetch({
+      tokenBody: goodToken,
+      getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } },
+    });
+    const products = [{
+      id: '1', name: 'A',
+      india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH',
+      us_affiliate_url: '', // product has NO US ASIN
+    }];
+    const enriched = await mod.enrichProductsWithLivePrice(products, 'us');
+    expect(enriched[0].live_price).toBe(1299.5);
+    expect(enriched[0].live_currency).toBe('INR');
+    expect(enriched[0].live_store).toBe('in');
+    expect(enriched[0].amazon_url).toContain('www.amazon.in');
+    expect(enriched[0].amazon_url).not.toContain('amazon.com');
+  });
+
+  it('US visitor + product with US ASIN but US not configured → India fallback, no error', async () => {
+    const keep = { ...process.env };
+    delete process.env.CREATORS_CLIENT_ID;
+    delete process.env.CREATORS_CLIENT_SECRET;
+    delete process.env.CREATORS_US_CLIENT_ID;
+    delete process.env.CREATORS_US_CLIENT_SECRET;
+    // Both stores' creds cleared → clean fallback box.
+    installFetch({ tokenBody: goodToken });
+    const products = [{ id: '1', name: 'A', india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH', us_affiliate_url: 'https://www.amazon.com/dp/B0USASIN01' }];
+    const enriched = await mod.enrichProductsWithLivePrice(products, 'us');
+    expect(enriched[0].live_price).toBeNull();
+    expect(enriched[0].live_available).toBe(false);
+    Object.assign(process.env, keep);
+  });
+
+  it('productUsAsin resolves the US ASIN from the us_affiliate_url / global URL', () => {
+    expect(mod.productUsAsin({ us_affiliate_url: 'https://www.amazon.com/dp/B0USASIN01' })).toBe('B0USASIN01');
+    expect(mod.productUsAsin({ global_affiliate_url: 'https://www.amazon.com/dp/B0USASIN02' })).toBe('B0USASIN02');
+    expect(mod.productUsAsin({ affiliate_url: 'https://www.amazon.com/dp/B0USASIN03' })).toBe('B0USASIN03');
+    expect(mod.productUsAsin({ india_affiliate_url: 'https://www.amazon.in/dp/B0INASIN01' })).toBeNull();
+    expect(mod.productUsAsin({})).toBeNull();
   });
 
   it('force:true bypasses the cache and hits the network again', async () => {

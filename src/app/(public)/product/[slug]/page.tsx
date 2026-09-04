@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
@@ -6,11 +7,14 @@ import ProductCard, { StarRating } from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
 import ProductCTA from './ProductCTA';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
-import { getLivePrice, productIndiaAsin, enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 import { formatLiveAmount, asOfLabel } from '@/lib/price-format';
+import { resolveVisitorStore } from '@/lib/geo';
+import { buildProductSchema } from '@/lib/product-schema';
 import type { Metadata } from 'next';
 
-export const revalidate = 120; // Cache product pages 2 minutes
+// Geo-aware rendering (visitor store) requires per-request evaluation.
+export const dynamic = 'force-dynamic';
 
 async function getProduct(slug: string) {
   ensureDbReady();
@@ -33,17 +37,22 @@ async function getProduct(slug: string) {
     } catch { return fallback; }
   };
 
-  // Fetch live Amazon.in price via the Creators API (1h cache; graceful fallback)
-  const mainAsin = productIndiaAsin(product);
-  const live = mainAsin ? await getLivePrice(mainAsin) : null;
-
   const related = db.prepare(`SELECT p.*, b.name as brand_name, c.name as category_name FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id
     WHERE p.category_id = ? AND p.id != ? AND p.status = 'published' AND p.deleted_at IS NULL LIMIT 4`).all(product.category_id, product.id);
 
-  // Fetch live prices for related products (one batched round-trip)
-  const relatedWithPrices = await enrichProductsWithLivePrice(related as any[]);
+  // Geo-aware: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  const hdrs = await headers();
+  const geo = resolveVisitorStore(hdrs);
+
+  // Main product + related in one enrichment pass (batched, 1h cache, graceful fallback)
+  const [mainEnriched, relatedWithPrices] = await Promise.all([
+    enrichProductsWithLivePrice([product], geo.store),
+    enrichProductsWithLivePrice(related as any[], geo.store),
+  ]);
+  const enriched = mainEnriched[0];
 
   return {
+    geo,
     product: {
       ...product,
       benefits: safeParse(product.benefits),
@@ -51,10 +60,14 @@ async function getProduct(slug: string) {
       cons: safeParse(product.cons),
       tags: safeParse(product.tags),
       specifications: safeParse(product.specifications, {}),
-      live_price: live?.price ?? null,
-      live_currency: live?.currency ?? null,
-      live_fetched_at: live?.fetchedAt ?? null,
-      live_available: !!live?.available,
+      live_price: enriched.live_price,
+      live_currency: enriched.live_currency,
+      live_fetched_at: enriched.live_fetched_at,
+      live_available: enriched.live_available,
+      live_store: enriched.live_store,
+      amazon_url: enriched.amazon_url,
+      amazon_in_url: enriched.amazon_in_url,
+      amazon_us_url: enriched.amazon_us_url,
     },
     related: relatedWithPrices,
   };
@@ -72,7 +85,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const { slug } = await params;
   const data = await getProduct(slug);
   if (!data) notFound();
-  const { product, related } = data;
+  const { product, related, geo } = data;
   const isAvailable = product.status === 'published';
   const disclosure = (() => { const db = getDb(); return (db.prepare("SELECT value FROM site_settings WHERE key = 'affiliate_disclosure'").get() as any)?.value || ''; })();
 
@@ -109,7 +122,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             )}
           </div>
           {product.live_price != null && product.live_price > 0 && product.live_fetched_at ? (
-            <p className="text-[11px] text-gray-400 mb-6">{asOfLabel(product.live_fetched_at)} · Live price from Amazon.in, refreshed hourly. Price &amp; availability may change.</p>
+            <p className="text-[11px] text-gray-400 mb-6">{asOfLabel(product.live_fetched_at, product.live_store || 'in')} · Live price from {product.live_store === 'us' ? 'Amazon.com' : 'Amazon.in'}, refreshed hourly. Price &amp; availability may change.</p>
           ) : (
             <p className="text-[11px] text-gray-400 mb-6">Prices shown are for reference and may vary. Click the shopping button below to see the latest price on Amazon.</p>
           )}
@@ -188,25 +201,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
       <NewsletterBox source="product_page" compact />
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
-        "@context": "https://schema.org", "@type": "Product", "name": product.name,
-        "description": product.short_description,
-        "brand": product.brand_name ? { "@type": "Brand", "name": product.brand_name } : undefined,
-        // Offer block is emitted ONLY when we have a real price (live Amazon.in
-        // price, else the editorial reference price). When API data is unavailable
-        // the price fields are cleanly omitted — invalid/empty offers are worse.
-        ...(product.live_price != null && product.live_price > 0 ? {
-          "offers": {
-            "@type": "Offer", "price": product.live_price, "priceCurrency": product.live_currency || "INR",
-            "availability": "https://schema.org/InStock",
-            "url": product.india_affiliate_url || undefined,
-          },
-        } : (product.current_price > 0 ? {
-          "offers": { "@type": "Offer", "price": product.current_price, "priceCurrency": product.currency || "USD",
-            "availability": isAvailable ? "https://schema.org/InStock" : "https://schema.org/OutOfStock" },
-        } : {})),
-        ...(product.rating > 0 && product.review_count > 0 ? { "aggregateRating": { "@type": "AggregateRating", "ratingValue": product.rating, "reviewCount": product.review_count } } : {}),
-      })}} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(buildProductSchema(product)) }} />
     </div>
   );
 }

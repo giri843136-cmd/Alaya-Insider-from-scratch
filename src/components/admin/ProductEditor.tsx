@@ -19,6 +19,7 @@ const defaultProduct = {
   affiliate_url: '', marketplace: '', affiliate_network: '', tracking_id: '', cta_text: 'Check Price',
   global_affiliate_url: '', global_affiliate_network: '', global_tracking_id: '', global_cta_label: 'Explore Global Options', global_active: true,
   india_affiliate_url: '', india_affiliate_network: '', india_tracking_id: '', india_cta_label: 'Explore India', india_active: true,
+  us_affiliate_url: '',
   seo_title: '', seo_description: '', canonical_url: '', focus_keyword: '',
 };
 
@@ -62,6 +63,7 @@ export default function ProductEditor({ productId }: Props) {
               global_tracking_id: p.global_tracking_id || '', global_cta_label: p.global_cta_label || 'Explore Global Options', global_active: !!p.global_active,
               india_affiliate_url: p.india_affiliate_url || '', india_affiliate_network: p.india_affiliate_network || '',
               india_tracking_id: p.india_tracking_id || '', india_cta_label: p.india_cta_label || 'Explore India', india_active: !!p.india_active,
+              us_affiliate_url: p.us_affiliate_url || '',
               affiliate_network: p.affiliate_network || '', tracking_id: p.tracking_id || '',
               cta_text: p.cta_text || 'Check Price',
               seo_title: p.seo_title || '', seo_description: p.seo_description || '',
@@ -510,6 +512,19 @@ export default function ProductEditor({ productId }: Props) {
                 </div>
                 <div><label className="text-xs font-medium text-gray-500 mb-1 block">CTA Label</label>
                   <input type="text" value={form.global_cta_label || ''} onChange={e => setForm(f => ({ ...f, global_cta_label: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm" placeholder="Explore Global Options" /></div>
+              </div>
+            </div>
+
+            {/* US Destination (amazon.com) */}
+            <div className="border border-gray-100 rounded-lg p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-gray-700">🇺🇸 US Shopping (amazon.com)</h3>
+                <span className="text-[11px] text-gray-400">Optional — powers US store prices ($) for US visitors. Leave empty to keep US visitors on the .in link.</span>
+              </div>
+              <div className="space-y-3">
+                <div><label className="text-xs font-medium text-gray-500 mb-1 block">US Affiliate URL (amazon.com)</label>
+                  <input type="url" value={form.us_affiliate_url || ''} onChange={e => setForm(f => ({ ...f, us_affiliate_url: e.target.value }))} className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm" placeholder="https://www.amazon.com/dp/B0XXXXXXXX?tag=alayainsider-20" /></div>
+                <p className="text-[11px] text-gray-400">The ASIN is extracted from this URL automatically. Products without a US URL never serve US prices.</p>
               </div>
             </div>
 

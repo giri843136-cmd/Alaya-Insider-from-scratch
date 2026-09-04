@@ -1,6 +1,25 @@
-# RUNBOOK — Going live with the Amazon Creators API (Amazon.in)
+# RUNBOOK — Going live with the Amazon Creators API (Amazon.in + Amazon.com)
 
-This is the step-by-step "switch to real keys" guide for **alayainsider.com**.
+This is the step-by-step guide for **alayainsider.com**. The site is a
+**dual-store** system:
+
+| Store | Marketplace | Tag | Credential version | Token endpoint | Currency |
+|---|---|---|---|---|---|
+| India 🇮🇳 | www.amazon.in | `alayainsider-21` | 3.2 (EU) | api.amazon.co.uk | INR ₹ |
+| United States 🇺🇸 | www.amazon.com | `alayainsider-20` | 3.1 (NA) | api.amazon.com | USD $ |
+
+Visitors are routed **server-side**: India → amazon.in + ₹, United States →
+amazon.com + $ (when the product has a US ASIN and US credentials are
+configured; otherwise they fall back to the .in link), and every other
+country → the .in rendering by default, with **Amazon OneLink** rewriting
+those visitors' links to their local store using the `-20` tag.
+
+Geo detection chain (first hit wins): `CF-IPCountry` header → MaxMind
+GeoLite2 local DB (`data/GeoLite2-Country.mmdb`, optional) → default India.
+As of 2026-09-04 the site is served by Hostinger's hcdn (not Cloudflare), so
+`CF-IPCountry` is currently absent — drop a GeoLite2-Country.mmdb file into
+`data/` (or set `GEOIP_DB_PATH`) to activate IP-based routing; until then
+visitors default to the India store and OneLink covers the rest.
 
 > ⚠️ **PA-API 5.0 no longer exists.** Amazon deprecated Product Advertising
 > API 5.0 on **April 30, 2026** and retired the endpoint on **May 15, 2026**
@@ -19,7 +38,53 @@ This is the step-by-step "switch to real keys" guide for **alayainsider.com**.
 - [ ] An "as of <date/time> IST" stamp sits next to product-page prices
 - [ ] All Amazon links carry your real tag ending `-21` (`alayainsider-21`)
 - [ ] One test click lands on the right amazon.in product with your tag in the URL
-- [ ] No errors in `data/logs/creators-api.log` after 24h; hourly cron refreshes visible
+- [ ] No errors in `data/logs/creators-api.log` after 24h; hourly cron refreshes visible per store
+- [ ] (US optional) US visitors see $ + amazon.com links; every other country default .in + OneLink
+
+> Timezone note: "as of" stamps show **IST** for India-store prices and **UTC**
+> for US-store prices (each price is stamped in its own store's timezone).
+
+---
+
+## Adding the US store later
+
+The US store is **optional** and the site works perfectly India-first without
+it — the US tab simply shows "Not configured". Add it whenever the US
+Associates account is approved:
+
+1. Get US credentials from **affiliate-program.amazon.com** → Tools → Creators
+   API (primary owner; approval / qualifying-sales gate applies per store).
+   Amazon.com accounts use credential version **3.1** (NA).
+2. Admin → **Amazon API** → **United States 🇺🇸** tab.
+3. Paste Credential ID / Secret / Version (`3.1`) / Partner Tag
+   (`alayainsider-20`). Marketplace is fixed to www.amazon.com.
+4. Click **Run connection test** with three amazon.com ASINs (clothing /
+   handbag / watch). Dummy keys → `invalid_client` = plumbing OK.
+5. Products need a **US ASIN**. Set it per product in Admin → Products →
+   Affiliate → **US Shopping (amazon.com)** URL field. Products whose
+   `global_affiliate_url` already points at www.amazon.com are detected
+   automatically, so most seeded products are already dual-store.
+6. US visitors now see $ prices + amazon.com links with `alayainsider-20`.
+   Products without a US listing fall back to the .in price/link automatically.
+
+## Installing OneLink in admin
+
+OneLink rewrites Amazon anchors for the **9 secondary marketplaces** to each
+visitor's local store with the `-20` tag. Everything on this site is already
+OneLink-ready — product links are **direct amazon.in / amazon.com anchors**
+(no `/go/` redirector), so OneLink can see and rewrite them.
+
+1. In the **US** Associates account: Account Settings → OneLink → generate the
+   snippet (or copy from the "OneLink" product linking tool).
+2. Admin → **Amazon API** → **Amazon OneLink** section → paste the snippet →
+   **Save & validate**.
+3. Only `<script src="https://…amazon-adsystem.com|amazon.com|amazon.co.uk">`
+   is accepted — inline JS or other hosts are rejected. The validated src(s)
+   are injected site-wide via `next/script` (`afterInteractive`).
+4. Status chip turns **Installed**. Verify on a live page with a German/UK
+   visitor (or `x-test-geo: DE` in a dev build) that the anchor still points
+   directly at amazon.in — OneLink performs the rewrite in the visitor's
+   browser.
 
 ---
 
@@ -45,33 +110,41 @@ keys; Amazon explicitly states they will not work.
 
 ---
 
-## Switch to real keys (≈2 minutes)
+## Switch to real keys (≈2 minutes per store)
 
-1. Deploy this code (`git pull`, `npm install`, `npm run build`,
-   `pm2 restart alayainsider`).
+1. Deploy this code (see the repo's DEPLOYMENT.md / Hostinger git deploy).
 2. Open **https://alayainsider.com/admin** → **Amazon API** (left sidebar).
-3. Paste:
+3. Pick the store tab (**India 🇮🇳** or **United States 🇺🇸**).
+4. Paste:
    - **Credential ID**
    - **Credential Secret** (blank = keep the stored one if you're just fixing a tag)
-   - **Credential Version** → `3.2`
-   - **Partner Tag** → `alayainsider-21`
-   - **Marketplace** → `www.amazon.in`
-4. Click **Save credentials**. (The secret is encrypted in the database with
-   `AUTH_SECRET`; it is never shown again or sent to the browser.)
-5. Click **Run connection test** with your three test ASINs.
-   - Real keys ⇒ items appear with images + ₹ prices. Done.
+   - **Credential Version** → `3.2` (India) or `3.1` (US)
+   - **Partner Tag** → `alayainsider-21` (India) or `alayainsider-20` (US)
+   - **Marketplace** → fixed per store, not editable
+5. Click **Save credentials**. (Each secret is encrypted separately in the
+   database with `AUTH_SECRET`; never shown again or sent to the browser.)
+6. Click **Run connection test** with three ASINs for that store's marketplace.
+   - Real keys ⇒ items appear with images + prices. Done.
    - Any error ⇒ see "Troubleshooting" below.
+7. Repeat on the other tab if you have that store's credentials.
 
 ### 60-second post-entry smoke test
 
-1. Open any product page that has an amazon.in link → you should see a ₹ price
-   with *"as of … IST · Live price from Amazon.in, refreshed hourly"*.
-2. Open the homepage → product cards show ₹ prices.
-3. Click a "Shop in India" button → amazon.in page opens **with
-   `tag=alayainsider-21`** in the URL.
-4. Open **Admin → Amazon API** → "Last successful API call" shows a recent
-   timestamp and the hourly-run card shows `live / refreshed` counts.
-5. Check `data/logs/creators-api.log` (server-side only) for any errors.
+1. Open any product page → you should see a price with
+   *"as of … · Live price from Amazon.(in|com), refreshed hourly"* for your
+   geo store (India visitors: ₹ + IST; US visitors with a US ASIN on the
+   product: $ + UTC).
+2. Open the homepage → product cards show prices for your store.
+3. Click the primary shopping button → the correct amazon marketplace opens
+   **with your real tag** (`-21` or `-20`) in the URL — a **direct** amazon
+   URL, not a `/go/` redirect.
+4. Open **Admin → Amazon API** → each store's "Last connection test" + "Last
+   successful API call" show recent timestamps; the cron card shows
+   `live / refreshed` counts per store.
+5. Check `data/logs/creators-api.log` (server-side only) — lines are prefixed
+   `[in]` / `[us]` per store.
+6. Geo simulation (dev only): send header `x-test-geo: US` to see the US
+   rendering, `x-test-geo: DE` to see the default .in rendering.
 
 ---
 
@@ -104,14 +177,17 @@ can also be triggered from **Admin → Amazon API → "Refresh all prices now"**
 
 Fallback mode is always one click away and is safe/compliant:
 
-1. **Admin → Amazon API → Clear credentials.** The site instantly returns to
-   "Check current price on Amazon" text-link boxes everywhere — no blank
-   pages, no errors. The content/design is untouched.
-2. If you also set `CREATORS_*` in `.env`, remove those lines and restart.
-3. Restore-point backups taken before this integration:
-   - Database: `data/backups/alaya-backup-20260904-131421.db`
-     (restore: `cp data/backups/alaya-backup-20260904-131421.db data/alaya.db && pm2 restart alayainsider`)
-   - Code: this repo (commit `e7a2719` is the pre-change HEAD).
+1. **Admin → Amazon API → Clear credentials** on the offending store tab (it
+   asks for confirmation). The site instantly returns to "Check current price
+   on Amazon" text-link boxes for that store — no blank pages, no errors.
+   Clearing the US store only returns the site to the India-first state.
+2. If you also set `CREATORS_*` / `CREATORS_US_*` in `.env`, remove those
+   lines and restart.
+3. Restore-point backups taken before the dual-store integration:
+   - Database: `data/backups/alaya-dualstore-20260904-144753.db` (pre-migration)
+     and `data/backups/alaya-backup-20260904-131421.db` (original India build)
+     (restore: `cp data/backups/alaya-dualstore-20260904-144753.db data/alaya.db` then restart)
+   - Code: this repo (commit `8a75c26` is the pre-dual-store HEAD).
 
 ---
 
@@ -120,19 +196,21 @@ Fallback mode is always one click away and is safe/compliant:
 | Symptom | Meaning / fix |
 |---|---|
 | Token test returns HTTP 401/400 `invalid_client` | Credentials rejected. Re-check Credential ID/Secret/Version. **With dummy keys this is the expected PASS result.** |
-| `NotAuthorizedException` / "not approved" on GetItems | Credentials work but Creators API access isn't approved for the marketplace/region yet (or wrong Partner Tag for amazon.in). |
-| `ItemNotAccessible` | The ASIN isn't sold on Amazon.in or isn't API-accessible. Paste an ASIN from an open amazon.in product page. |
+| `NotAuthorizedException` / "not approved" on GetItems | Credentials work but Creators API access isn't approved for the marketplace/region yet (or wrong Partner Tag for the store). |
+| `ItemNotAccessible` | The ASIN isn't sold on that marketplace (amazon.in vs amazon.com) or isn't API-accessible. Paste an ASIN from an open product page on the same marketplace. |
 | HTTP 429 throttling | Expected occasionally under bursts; the 1-hour cache absorbs it. Don't raise request volume — the cache refresh cadence already exceeds requirements. |
-| Product shows fallback text after saving keys | Cache retains failed lookups for 60s. Wait a minute, or run "Refresh all prices now". |
+| Product shows fallback text after saving keys | Cache retains failed lookups for 60s per store. Wait a minute, or run "Refresh all prices now". |
 | Secret decryption error in logs | `AUTH_SECRET` changed after saving the secret → re-enter the Credential Secret once. |
-| Page loads but price empty / stale | Confirm the product row has an **india_affiliate_url** (amazon.in link). Products without one intentionally show fallback text. |
+| US visitor still sees ₹ | Product has no US ASIN (no `us_affiliate_url` and no amazon.com `global_affiliate_url`) → intentional .in fallback. Add the US URL in the product editor. |
+| OneLink "Installed" but links not rewritten | Confirm product anchors are direct amazon.in/com URLs (they are — the `/go/` redirector was removed for Amazon links) and the snippet src host is amazon-adsystem.com. |
+| Page loads but price empty / stale | Confirm the product row has an affiliate URL for that store. Products without one intentionally show fallback text. |
 
 ---
 
 ## Compliance notes (Amazon policy)
 
-- **Refresh cadence**: prices refresh hourly (1-hour cache) **and** carry an
-  "as of … IST" stamp on product pages — exceeds the hourly requirement.
+- **Refresh cadence**: prices refresh hourly (1-hour cache per store) **and** carry an
+  "as of …" stamp on product pages (IST for India, UTC for US) — exceeds the hourly requirement.
 - **No scraping**: the old HTML-scraping price fetcher was removed. All live
   data comes from the official Creators API.
 - **Images**: the site displays its own editorial product images; the admin
@@ -141,6 +219,8 @@ Fallback mode is always one click away and is safe/compliant:
   rating/review counts continue to come from your editorial database fields.
 - **Disclosure**: all outbound buttons are `rel="nofollow sponsored"`,
   `target="_blank"`, and the FTC/Associates disclosure is rendered with PaidLinkTag.
+- **OneLink**: product links are direct amazon.in/amazon.com anchors (no `/go/`
+  internal redirector), so OneLink can rewrite them for secondary markets.
 - **Secrets**: Credential Secret is encrypted at rest (AES-256-GCM keyed by
   `AUTH_SECRET`), never returned to the browser, never logged, never in
   sitemap/RSS/JSON. Failures log only to `data/logs/creators-api.log`.
@@ -151,10 +231,15 @@ Fallback mode is always one click away and is safe/compliant:
 
 | Concern | File |
 |---|---|
-| Creators API client (OAuth2, GetItems, encryption, diagnostics) | `src/lib/creators-api.ts` |
-| Price cache + page helpers (1h TTL, India ASIN) | `src/lib/amazon-price.ts`, `src/lib/price-format.ts` |
-| Cache table | `src/lib/schema.ts` (`amazon_price_cache`) |
-| Credentials UI + connection test + verification | `src/app/admin/amazon/page.tsx`, `src/app/api/creators/*` |
-| Hourly refresh endpoint | `src/app/api/cron/amazon-prices/route.ts` |
-| Standalone plumbing diagnostic (server shell) | `scripts/diagnose-creators.js` |
-| Env reference | `.env.example` (CREATORS_*, CRON_SECRET) |
+| Store definitions (in/us, tags, token endpoints) | `src/lib/stores.ts` |
+| Creators API client (OAuth2 per store, GetItems, encryption, diagnostics) | `src/lib/creators-api.ts` |
+| Geo detection (CF-IPCountry → MaxMind → India) | `src/lib/geo.ts` |
+| Price cache + page helpers (per-store 1h TTL, ASIN resolution, direct URLs) | `src/lib/amazon-price.ts`, `src/lib/price-format.ts` |
+| Product JSON-LD builder (store-consistent, omit-when-no-price) | `src/lib/product-schema.ts` |
+| OneLink sanitizer + root-layout injection | `src/lib/onelink.ts`, `src/lib/onelink-server.ts`, `src/app/layout.tsx` |
+| Cache table + dual-store migration + amazon_clicks | `src/lib/schema.ts` |
+| Credentials UI (two tabs) + OneLink + logs + cache table | `src/app/admin/amazon/page.tsx`, `src/app/api/creators/*` |
+| Hourly refresh endpoint (both stores) | `src/app/api/cron/amazon-prices/route.ts` |
+| Click beacon (direct anchors stay direct) | `src/app/api/clicks/route.ts`, `src/components/public/DestinationSelector.tsx` |
+| Standalone plumbing diagnostic (both token endpoints) | `scripts/diagnose-creators.js` |
+| Env reference | `.env.example` (CREATORS_*, CREATORS_US_*, GEOIP_DB_PATH, CRON_SECRET) |

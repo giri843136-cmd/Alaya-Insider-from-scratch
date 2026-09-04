@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import ProductCard from '@/components/public/ProductCard';
@@ -6,8 +7,12 @@ import NewsletterBox from '@/components/public/NewsletterBox';
 import HeroCarousel from '@/components/public/HeroCarousel';
 import CategoryShowcase from '@/components/public/CategoryShowcase';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { resolveVisitorStore } from '@/lib/geo';
 
-export const revalidate = 60; // Cache homepage for 60 seconds to reduce DB hits
+// Geo-aware rendering (visitor store) requires per-request evaluation — the
+// homepage renders dynamically so India/US visitors see their own store.
+
+export const dynamic = 'force-dynamic';
 
 async function getHomeData() {
   ensureDbReady();
@@ -41,8 +46,11 @@ async function getHomeData() {
   const heroSettings: Record<string, string> = {};
   (db.prepare('SELECT key, value FROM hero_settings').all() as any[]).forEach((s: any) => { heroSettings[s.key] = s.value; });
 
-  // Enrich products with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
-  const enrichWithPrices = (items: any[]) => enrichProductsWithLivePrice(items);
+  // Geo-aware: India → .in/₹, US → .com/$ (fallback to .in when no US ASIN),
+  // everywhere else → .in default (OneLink rewrites to local stores).
+  const hdrs = await headers();
+  const geo = resolveVisitorStore(hdrs);
+  const enrichWithPrices = (items: any[]) => enrichProductsWithLivePrice(items, geo.store);
 
   const [enrichedTrending, enrichedEditorsPicks, enrichedPopular] = await Promise.all([
     enrichWithPrices(trending as any[]),

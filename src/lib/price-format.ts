@@ -2,20 +2,22 @@
  * Live-price display helpers. Pure functions so they can be imported by
  * server components (SSR) and client components alike.
  *
- * Prices come from the Amazon Creators API for the India marketplace and are
- * amounts in INR. We format with Intl so currency symbols/grouping are right
- * (₹1,299.00) and never hand-roll "$" signs (the old code hardcoded USD).
+ * Prices come from the Amazon Creators API for the India (INR) or US (USD)
+ * marketplace. We format with Intl so currency symbols/grouping are right
+ * (₹1,299.00 vs $1,299.00) and never hand-roll "$" signs.
  */
+
+import { STORES, type Store } from './stores';
 
 const CURRENCY_DEFAULT = 'INR';
 
-/** Format an amount for display, e.g. 1299 → "₹1,299.00". */
+/** Format an amount for display, e.g. 1299 → "₹1,299.00" or "$1,299.00". */
 export function formatLiveAmount(amount: number | null | undefined, currency?: string | null): string {
   if (amount == null || isNaN(amount)) return '';
   const cur = currency || CURRENCY_DEFAULT;
   try {
     // en-IN gives Indian digit grouping (1,29,900) which is what INR prices
-    // use on Amazon.in; other currencies fall back to en-US style grouping.
+    // use on Amazon.in; en-US gives comma grouping for USD on Amazon.com.
     const locale = cur === 'INR' ? 'en-IN' : 'en-US';
     return new Intl.NumberFormat(locale, { style: 'currency', currency: cur, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   } catch {
@@ -24,17 +26,20 @@ export function formatLiveAmount(amount: number | null | undefined, currency?: s
 }
 
 /**
- * Short "as of" label for a price, e.g. "as of 3 Sep 2026, 1:30 pm IST".
+ * Short "as of" label for a price, e.g. "as of 3 Sep 2026, 1:30 pm IST" for
+ * the India store or "as of 3 Sep 2026, 8:00 am UTC" for the US store.
  * Amazon policy: prices must refresh at least hourly OR carry an as-of stamp —
  * we do both (1-hour cache + this stamp on product pages).
  */
-export function asOfLabel(fetchedAtMs: number | null | undefined): string {
+export function asOfLabel(fetchedAtMs: number | null | undefined, store: Store = 'in'): string {
   if (!fetchedAtMs || isNaN(fetchedAtMs)) return '';
   const d = new Date(fetchedAtMs);
+  const tz = store === 'us' ? 'UTC' : 'Asia/Kolkata';
+  const tzLabel = store === 'us' ? 'UTC' : 'IST';
   try {
-    const date = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
-    const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
-    return `as of ${date}, ${time} IST`;
+    const date = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
+    const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+    return `as of ${date}, ${time} ${tzLabel}`;
   } catch {
     return `as of ${d.toISOString()}`;
   }
@@ -43,9 +48,13 @@ export function asOfLabel(fetchedAtMs: number | null | undefined): string {
 /**
  * Derive the display fields pages attach to enriched products.
  * Consumer components should read product.live_price / product.live_currency /
- * product.live_fetched_at / product.live_available.
+ * product.live_fetched_at / product.live_available / product.live_store.
+ * `store` only affects the default currency when the payload lacks one.
  */
-export function liveDisplayFields(live: { price: number | null; currency?: string | null; available?: boolean; fetchedAt?: number | null } | null | undefined) {
+export function liveDisplayFields(
+  live: { price: number | null; currency?: string | null; available?: boolean; fetchedAt?: number | null } | null | undefined,
+  store: Store = 'in',
+) {
   if (!live) {
     return { live_price: null, live_currency: null, live_fetched_at: null, live_available: false };
   }
@@ -55,7 +64,7 @@ export function liveDisplayFields(live: { price: number | null; currency?: strin
     live_price: price,
     // Without a real price the display fields are empty so callers can cleanly
     // fall back to "Check price on Amazon" text (and omit schema price data).
-    live_currency: hasPrice ? live.currency || CURRENCY_DEFAULT : null,
+    live_currency: hasPrice ? live.currency || STORES[store].currency : null,
     live_fetched_at: hasPrice ? live.fetchedAt ?? null : null,
     live_available: hasPrice && !!live.available,
   };

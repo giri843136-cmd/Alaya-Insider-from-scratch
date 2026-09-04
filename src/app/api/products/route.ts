@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/auth';
 import { v4 as uuid } from 'uuid';
 import slugify from 'slugify';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { resolveVisitorStore } from '@/lib/geo';
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -139,7 +140,9 @@ export async function GET(req: NextRequest) {
     specifications: JSON.parse(p.specifications || '{}'),
     additional_retailers: JSON.parse(p.additional_retailers || '[]'),
   }));
-  const enrichedProducts = await enrichProductsWithLivePrice(parsed);
+  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  const geo = resolveVisitorStore(req.headers);
+  const enrichedProducts = await enrichProductsWithLivePrice(parsed, geo.store);
 
   return jsonResponse({
     products: enrichedProducts,
@@ -185,6 +188,7 @@ export async function POST(req: NextRequest) {
       'affiliate_url','marketplace','affiliate_network','tracking_id','cta_text',
       'global_affiliate_url','global_affiliate_network','global_tracking_id','global_cta_label','global_active',
       'india_affiliate_url','india_affiliate_network','india_tracking_id','india_cta_label','india_active',
+      'us_affiliate_url',
       'additional_retailers','seo_title','seo_description','canonical_url','focus_keyword',
       'created_by','published_at'
     ];
@@ -203,6 +207,7 @@ export async function POST(req: NextRequest) {
       data.affiliate_url||'', data.marketplace||'', data.affiliate_network||'', data.tracking_id||'', data.cta_text||'Check Price',
       data.global_affiliate_url||'', data.global_affiliate_network||'', data.global_tracking_id||'', data.global_cta_label||'Explore Global Options', data.global_active!==false?1:0,
       data.india_affiliate_url||'', data.india_affiliate_network||'', data.india_tracking_id||'', data.india_cta_label||'Explore India', data.india_active!==false?1:0,
+      data.us_affiliate_url||'',
       JSON.stringify(data.additional_retailers||[]), data.seo_title||'', data.seo_description||'', data.canonical_url||'', data.focus_keyword||'',
       user.id, data.status === 'published' ? new Date().toISOString() : null,
     ];

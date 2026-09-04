@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import CookieConsent from '@/components/public/CookieConsent';
+import { getOneLinkSrcs } from '@/lib/onelink-server';
 
 const GA_ID = process.env.NEXT_PUBLIC_ANALYTICS_ID;
 
@@ -20,6 +21,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Amazon OneLink — rewrites Amazon product anchors for visitors in the 9
+  // secondary markets to their local store (with the -20 tag). Read per
+  // request (not module scope) so an admin save applies immediately.
+  const ONELINK_SRCS = getOneLinkSrcs();
   return (
     <html lang="en">
       <head>
@@ -41,6 +46,10 @@ export default function RootLayout({
             </Script>
           </>
         )}
+        {/* Amazon OneLink — validated external script(s) injected once */}
+        {ONELINK_SRCS.map(src => (
+          <Script key={src} src={src} strategy="afterInteractive" />
+        ))}
         <CookieConsent />
       </body>
     </html>

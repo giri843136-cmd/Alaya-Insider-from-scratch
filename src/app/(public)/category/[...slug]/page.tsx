@@ -1,14 +1,17 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import ProductCard from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { resolveVisitorStore } from '@/lib/geo';
 import type { Metadata } from 'next';
 
-export const revalidate = 120; // Cache category pages 2 minutes
+// Geo-aware rendering (visitor store) requires per-request evaluation.
+export const dynamic = 'force-dynamic';
 
 /* ------------------------------------------------------------------ */
 /*  Resolve the URL segments into a category record                   */
@@ -106,8 +109,10 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     ORDER BY p.is_featured DESC, p.created_at DESC
   `).all(category.id, category.id, category.id) as any[];
 
-  // Enrich products with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
-  const enrichedProducts = await enrichProductsWithLivePrice(products as any[]);
+  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  const hdrs = await headers();
+  const geo = resolveVisitorStore(hdrs);
+  const enrichedProducts = await enrichProductsWithLivePrice(products as any[], geo.store);
 
   // JSON-LD breadcrumb
   const breadcrumbItems = [

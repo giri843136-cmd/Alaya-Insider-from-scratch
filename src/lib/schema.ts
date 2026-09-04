@@ -179,16 +179,25 @@ export function initializeDatabase() {
       key TEXT PRIMARY KEY, value TEXT DEFAULT '', group_name TEXT DEFAULT 'general',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    -- Amazon Creators API price cache (India marketplace).
+    -- Amazon Creators API price cache — dual-store (composite key store+asin).
     -- ok=1 payload cached 1h (Amazon hourly-refresh policy), ok=0 failures 60s.
     CREATE TABLE IF NOT EXISTS amazon_price_cache (
-      asin TEXT PRIMARY KEY,
+      store TEXT NOT NULL DEFAULT 'in',
+      asin TEXT NOT NULL,
       ok INTEGER NOT NULL DEFAULT 0,
       payload TEXT NOT NULL DEFAULT '{}',
       error_code TEXT DEFAULT '',
       error_message TEXT DEFAULT '',
-      fetched_at TEXT NOT NULL
+      fetched_at TEXT NOT NULL,
+      PRIMARY KEY (store, asin)
     );
+    CREATE TABLE IF NOT EXISTS amazon_clicks (
+      id TEXT PRIMARY KEY, product_id TEXT, store TEXT DEFAULT '', country TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_amazon_clicks_date ON amazon_clicks(created_at);
+    CREATE INDEX IF NOT EXISTS idx_amazon_clicks_store ON amazon_clicks(store);
     CREATE TABLE IF NOT EXISTS menus (
       id TEXT PRIMARY KEY, location TEXT NOT NULL, items TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -264,7 +273,58 @@ export function initializeDatabase() {
   try { db.exec(`ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN two_factor_secret TEXT DEFAULT ''`); } catch {}
 
+  // Migration: add the US affiliate URL column for the dual-store system
+  // (amazon.com listing alongside the existing amazon.in one).
+  try { db.exec(`ALTER TABLE products ADD COLUMN us_affiliate_url TEXT DEFAULT ''`); } catch {}
+
+  migratePriceCacheToDualStore(db);
+  // Index must be created only after the dual-store migration (a v1 table has
+  // no `store` column yet, so CREATE INDEX would fail mid-migration).
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_amazon_price_cache_store ON amazon_price_cache(store)'); } catch { /* ignore */ }
+
   return db;
+}
+
+/**
+ * Dual-store migration for amazon_price_cache.
+ *
+ * v1 schema keyed the cache by asin alone (India-only). v2 needs a composite
+ * key (store, asin) so the same ASIN can exist for amazon.in and amazon.com.
+ * SQLite cannot alter a PRIMARY KEY, so we rebuild the table: create the new
+ * shape, copy existing rows with store='in', drop the old one.
+ */
+export function migratePriceCacheToDualStore(db: any) {
+  try {
+    const cols = db.prepare('PRAGMA table_info(amazon_price_cache)').all() as any[];
+    if (!cols || cols.length === 0) return; // table not created yet
+    const hasStore = cols.some((c: any) => c.name === 'store');
+    if (hasStore) return; // already migrated
+
+    db.exec(`
+      BEGIN;
+      CREATE TABLE amazon_price_cache_v2 (
+        store TEXT NOT NULL DEFAULT 'in',
+        asin TEXT NOT NULL,
+        ok INTEGER NOT NULL DEFAULT 0,
+        payload TEXT NOT NULL DEFAULT '{}',
+        error_code TEXT DEFAULT '',
+        error_message TEXT DEFAULT '',
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (store, asin)
+      );
+      INSERT INTO amazon_price_cache_v2 (store, asin, ok, payload, error_code, error_message, fetched_at)
+        SELECT 'in', asin, ok, payload, error_code, error_message, fetched_at FROM amazon_price_cache;
+      DROP TABLE amazon_price_cache;
+      ALTER TABLE amazon_price_cache_v2 RENAME TO amazon_price_cache;
+      CREATE INDEX IF NOT EXISTS idx_amazon_price_cache_store ON amazon_price_cache(store);
+      COMMIT;
+    `);
+  } catch (e) {
+    // If anything above fails (e.g. already migrated mid-way), roll back so the
+    // old table remains usable rather than leaving a half-migrated state.
+    try { db.exec('ROLLBACK'); } catch { /* no active transaction */ }
+    console.error('amazon_price_cache dual-store migration failed:', (e as Error)?.message);
+  }
 }
 
 export function seedRoles() {

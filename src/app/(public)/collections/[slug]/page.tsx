@@ -1,11 +1,14 @@
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import ProductCard from '@/components/public/ProductCard';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { resolveVisitorStore } from '@/lib/geo';
 
-export const revalidate = 300; // Cache collection detail 5 minutes
+// Geo-aware rendering (visitor store) requires per-request evaluation.
+export const dynamic = 'force-dynamic';
 
 export default async function CollectionPage({ params }: { params: Promise<{ slug: string }> }) {
   ensureDbReady();
@@ -24,8 +27,10 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     ORDER BY cp.sort_order
   `).all(collection.id);
 
-  // Enrich with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
-  const products = await enrichProductsWithLivePrice(rawProducts as any[]);
+  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  const hdrs = await headers();
+  const geo = resolveVisitorStore(hdrs);
+  const products = await enrichProductsWithLivePrice(rawProducts as any[], geo.store);
 
   return (
     <div className="max-w-content mx-auto px-4 sm:px-6 py-8">

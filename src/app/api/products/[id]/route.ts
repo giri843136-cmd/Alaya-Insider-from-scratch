@@ -143,6 +143,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       india_tracking_id: data.india_tracking_id ?? existing.india_tracking_id,
       india_cta_label: data.india_cta_label ?? existing.india_cta_label,
       india_active: data.india_active !== undefined ? (data.india_active ? 1 : 0) : existing.india_active,
+      us_affiliate_url: data.us_affiliate_url ?? existing.us_affiliate_url ?? '',
       // Other
       additional_retailers: JSON.stringify(data.additional_retailers ?? JSON.parse(existing.additional_retailers || '[]')),
       seo_title: data.seo_title ?? existing.seo_title,

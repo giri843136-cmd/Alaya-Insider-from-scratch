@@ -80,6 +80,76 @@ describe('credentials resolution', () => {
     expect(api.getCredentials()).toBeNull();
     Object.assign(process.env, keep);
   });
+
+  it('resolves the US store from CREATORS_US_* env vars (3.1 → api.amazon.com)', () => {
+    process.env.CREATORS_US_CLIENT_ID = 'amzn1.us.client';
+    process.env.CREATORS_US_CLIENT_SECRET = 'us-secret';
+    process.env.CREATORS_US_VERSION = '3.1';
+    process.env.CREATORS_US_PARTNER_TAG = 'alayainsider-20';
+    process.env.CREATORS_US_MARKETPLACE = 'www.amazon.com';
+
+    const us = api.getCredentials('us');
+    expect(us).not.toBeNull();
+    expect(us.clientId).toBe('amzn1.us.client');
+    expect(us.partnerTag).toBe('alayainsider-20');
+    expect(us.marketplace).toBe('www.amazon.com');
+    expect(us.tokenEndpoint).toBe('https://api.amazon.com/auth/o2/token'); // 3.1 → NA
+    expect(us.source).toBe('env');
+
+    // The India store must be unaffected.
+    const inCreds = api.getCredentials('in');
+    expect(inCreds.partnerTag).toBe('alayainsider-21');
+    expect(inCreds.tokenEndpoint).toBe('https://api.amazon.co.uk/auth/o2/token');
+
+    delete process.env.CREATORS_US_CLIENT_ID;
+    delete process.env.CREATORS_US_CLIENT_SECRET;
+    delete process.env.CREATORS_US_VERSION;
+    delete process.env.CREATORS_US_PARTNER_TAG;
+    delete process.env.CREATORS_US_MARKETPLACE;
+  });
+
+  it('US store is not configured when only India env vars exist', () => {
+    const us = api.getCredentials('us');
+    expect(us).toBeNull();
+    expect(api.isConfigured('us')).toBe(false);
+    expect(api.isConfigured('in')).toBe(true);
+  });
+
+  it('per-store diagnostics never leak the US secret', () => {
+    process.env.CREATORS_US_CLIENT_ID = 'amzn1.us.client';
+    process.env.CREATORS_US_CLIENT_SECRET = 'super-secret-us-value';
+    process.env.CREATORS_US_VERSION = '3.1';
+    process.env.CREATORS_US_PARTNER_TAG = 'alayainsider-20';
+
+    const diag = api.getDiagnostics('us');
+    expect(diag.configured).toBe(true);
+    expect(JSON.stringify(diag)).not.toContain('super-secret-us-value');
+
+    delete process.env.CREATORS_US_CLIENT_ID;
+    delete process.env.CREATORS_US_CLIENT_SECRET;
+    delete process.env.CREATORS_US_VERSION;
+    delete process.env.CREATORS_US_PARTNER_TAG;
+  });
+});
+
+describe('partner tag validation', () => {
+  it('accepts the correct suffix per store', () => {
+    expect(api.validatePartnerTag('alayainsider-21', 'in').ok).toBe(true);
+    expect(api.validatePartnerTag('alayainsider-20', 'us').ok).toBe(true);
+  });
+
+  it('warns (but does not reject) a valid tag with the wrong suffix', () => {
+    const v = api.validatePartnerTag('alayainsider-20', 'in');
+    expect(v.ok).toBe(true);
+    expect(v.warning).toBeTruthy();
+  });
+
+  it('rejects malformed tags', () => {
+    expect(api.validatePartnerTag('', 'in').ok).toBe(false);
+    expect(api.validatePartnerTag('alayainsider', 'in').ok).toBe(false);
+    expect(api.validatePartnerTag('alayainsider-2', 'in').ok).toBe(false);
+    expect(api.validatePartnerTag('alayainsider-21x', 'in').ok).toBe(false);
+  });
 });
 
 describe('secret encryption at rest', () => {

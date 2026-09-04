@@ -3,17 +3,22 @@
  * Product Advertising API 5.0 (PA-API 5 was deprecated 2026-04-30 and the
  * endpoint retired 2026-05-15).
  *
- * Target marketplace: Amazon.in (www.amazon.in)
- * Auth:            OAuth 2.0 client-credentials (NOT AWS SigV4)
- * Token endpoint:  api.amazon.co.uk/auth/o2/token for India (credential version 3.2, EU)
- * API endpoint:    https://creatorsapi.amazon/catalog/v1/getItems
+ * Dual-store support:
+ *   India:  marketplace www.amazon.in,  tag alayainsider-21, credential version 3.2 (EU),
+ *           token endpoint https://api.amazon.co.uk/auth/o2/token, currency INR
+ *   US:     marketplace www.amazon.com, tag alayainsider-20, credential version 3.1 (NA),
+ *           token endpoint https://api.amazon.com/auth/o2/token, currency USD
+ * API endpoint (both): https://creatorsapi.amazon/catalog/v1/getItems
  *
- * Credentials are resolved from (in priority order):
- *   1. Encrypted site_settings rows (entered via /admin/amazon)  → DB wins so a
+ * Each store has its own credential set, token cache and diagnostics — both
+ * secrets are encrypted at rest (AES-256-GCM keyed by AUTH_SECRET).
+ *
+ * Credentials are resolved per store from (in priority order):
+ *   1. Encrypted site_settings rows (entered via /admin/amazon) → DB wins so a
  *      non-technical admin can manage keys without SSH.
- *   2. CREATORS_* environment variables (empty values are ignored).
+ *   2. CREATORS_* (India) / CREATORS_US_* (US) environment variables.
  *
- * The secret is never returned to the browser and never logged.
+ * Secrets are never returned to the browser and never logged.
  * All failures degrade to structured results — callers must never see a throw
  * from this module for a normal price lookup.
  */
@@ -22,13 +27,17 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import getDb from './db';
+import { STORES, DEFAULT_STORE, storeConfig, type Store, type StoreConfig } from './stores';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+export type { Store, StoreConfig };
+export { STORES, DEFAULT_STORE, storeConfig };
 
 export interface CreatorsCredentials {
   clientId: string;
   clientSecret: string;
-  /** Credential version assigned by Amazon (3.1 NA / 3.2 EU / 3.3 FE). India = 3.2. */
+  /** Credential version assigned by Amazon (3.1 NA / 3.2 EU / 3.3 FE). */
   version: string;
   /** Amazon Associates tag, e.g. "alayainsider-21" */
   partnerTag: string;
@@ -37,6 +46,7 @@ export interface CreatorsCredentials {
   /** OAuth token endpoint (override). Default derived from `version`. */
   tokenEndpoint: string;
   source: 'db' | 'env';
+  store: Store;
 }
 
 export interface CreatorsItem {
@@ -68,7 +78,7 @@ export interface CreatorsGetItemsResult {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-export const DEFAULT_MARKETPLACE = 'www.amazon.in';
+export const DEFAULT_MARKETPLACE = STORES.in.marketplace;
 
 const API_ENDPOINT = 'https://creatorsapi.amazon/catalog/v1/getItems';
 const TOKEN_SCOPE = 'creatorsapi::default';
@@ -81,8 +91,9 @@ const TOKEN_ENDPOINTS_BY_VERSION: Record<string, string> = {
 
 const REQUEST_TIMEOUT_MS = 8000;
 
-// Settings keys stored in site_settings
-const DB_KEYS = {
+// Settings keys stored in site_settings. The India store keeps the original
+// unprefixed keys (backward compatible); the US store gets a "us_" segment.
+const DB_KEYS: Record<string, string> = {
   clientId: 'creators_client_id',
   secretEnc: 'creators_secret_enc',
   version: 'creators_version',
@@ -97,17 +108,18 @@ const DB_KEYS = {
   lastTest: 'creators_last_test',
   lastCronRun: 'creators_last_cron_run',
   lastCronSummary: 'creators_last_cron_summary',
-} as const;
+};
 
-// Keys cleared together when credentials are removed/changed.
-const CREDENTIAL_KEYS = [
-  DB_KEYS.clientId,
-  DB_KEYS.secretEnc,
-  DB_KEYS.version,
-  DB_KEYS.partnerTag,
-  DB_KEYS.marketplace,
-  DB_KEYS.tokenEndpoint,
-];
+function keyFor(store: Store, key: string): string {
+  if (store === 'in') return DB_KEYS[key];
+  return DB_KEYS[key].replace('creators_', `creators_${store}_`);
+}
+
+// Keys cleared together when credentials are removed/changed (per store).
+function credentialKeys(store: Store): string[] {
+  return [keyFor(store, 'clientId'), keyFor(store, 'secretEnc'), keyFor(store, 'version'),
+    keyFor(store, 'partnerTag'), keyFor(store, 'marketplace'), keyFor(store, 'tokenEndpoint')];
+}
 
 const SECRET_PREFIX = 'enc:v1:';
 
@@ -195,29 +207,31 @@ export function defaultTokenEndpoint(version: string): string {
   return TOKEN_ENDPOINTS_BY_VERSION[version] || TOKEN_ENDPOINTS_BY_VERSION['3.2'];
 }
 
-// ─── Credential resolution ──────────────────────────────────────────────────
+// ─── Credential resolution (per store) ─────────────────────────────────────
 
 /**
- * Load credentials: DB (admin panel) takes priority, then CREATORS_* env vars.
- * Returns null when nothing usable is configured — the caller must fall back
+ * Load credentials for one store: DB (admin panel) takes priority, then the
+ * store's env vars (CREATORS_* for India, CREATORS_US_* for US).
+ * Returns null when nothing usable is configured — callers must fall back
  * gracefully (that is exactly what the UI does with "Check price on Amazon").
  */
-export function getCredentials(): CreatorsCredentials | null {
-  const dbClientId = getSetting(DB_KEYS.clientId);
-  const dbSecretEnc = getSetting(DB_KEYS.secretEnc);
+export function getCredentials(store: Store = DEFAULT_STORE): CreatorsCredentials | null {
+  const cfg = STORES[store];
+  const dbClientId = getSetting(keyFor(store, 'clientId'));
+  const dbSecretEnc = getSetting(keyFor(store, 'secretEnc'));
   let dbSecret = '';
   if (dbSecretEnc) {
     try {
       dbSecret = decryptSecret(dbSecretEnc);
     } catch (e: any) {
-      log(`Secret decryption failed (AUTH_SECRET changed?): ${e.message}`);
+      log(`[${store}] Secret decryption failed (AUTH_SECRET changed?): ${e.message}`);
       dbSecret = '';
     }
   }
-  const dbVersion = getSetting(DB_KEYS.version);
-  const dbPartnerTag = getSetting(DB_KEYS.partnerTag);
-  const dbMarketplace = getSetting(DB_KEYS.marketplace);
-  const dbTokenEndpoint = getSetting(DB_KEYS.tokenEndpoint);
+  const dbVersion = getSetting(keyFor(store, 'version'));
+  const dbPartnerTag = getSetting(keyFor(store, 'partnerTag'));
+  const dbMarketplace = getSetting(keyFor(store, 'marketplace'));
+  const dbTokenEndpoint = getSetting(keyFor(store, 'tokenEndpoint'));
 
   const fromDb =
     dbClientId && dbSecret && dbVersion && dbPartnerTag
@@ -226,41 +240,71 @@ export function getCredentials(): CreatorsCredentials | null {
           clientSecret: dbSecret,
           version: dbVersion,
           partnerTag: dbPartnerTag,
-          marketplace: dbMarketplace || DEFAULT_MARKETPLACE,
+          marketplace: dbMarketplace || cfg.marketplace,
           tokenEndpoint: dbTokenEndpoint || defaultTokenEndpoint(dbVersion),
           source: 'db' as const,
+          store,
         }
       : null;
 
   if (fromDb) return fromDb;
 
-  const envClientId = env('CREATORS_CLIENT_ID');
-  const envSecret = env('CREATORS_CLIENT_SECRET');
-  const envVersion = env('CREATORS_VERSION');
-  const envPartnerTag = env('CREATORS_PARTNER_TAG');
+  const p = cfg.envPrefix;
+  const envClientId = env(`${p}CLIENT_ID`);
+  const envSecret = env(`${p}CLIENT_SECRET`);
+  const envVersion = env(`${p}VERSION`);
+  const envPartnerTag = env(`${p}PARTNER_TAG`);
   if (envClientId && envSecret && envVersion && envPartnerTag) {
-    const version = envVersion;
     return {
       clientId: envClientId,
       clientSecret: envSecret,
-      version,
+      version: envVersion,
       partnerTag: envPartnerTag,
-      marketplace: env('CREATORS_MARKETPLACE') || DEFAULT_MARKETPLACE,
-      tokenEndpoint: env('CREATORS_TOKEN_ENDPOINT') || defaultTokenEndpoint(version),
+      marketplace: env(`${p}MARKETPLACE`) || cfg.marketplace,
+      tokenEndpoint: env(`${p}TOKEN_ENDPOINT`) || defaultTokenEndpoint(envVersion),
       source: 'env' as const,
+      store,
     };
   }
 
   return null;
 }
 
-export function isConfigured(): boolean {
-  return getCredentials() !== null;
+export function isConfigured(store: Store = DEFAULT_STORE): boolean {
+  return getCredentials(store) !== null;
 }
 
-// ─── OAuth2 token (cached in the DB, refreshed before expiry) ──────────────
+/** All stores with usable credentials (used by the hourly cron). */
+export function configuredStores(): Store[] {
+  return (['in', 'us'] as Store[]).filter(s => isConfigured(s));
+}
+
+/**
+ * Partner Tag validation per store. Amazon.in tags end in -21, amazon.com in
+ * -20. We hard-reject malformed tags and return a warning for a valid format
+ * that does not match the store's expected suffix (admin UI shows it).
+ */
+export function validatePartnerTag(tag: string, store: Store): { ok: boolean; warning?: string; error?: string } {
+  const t = (tag || '').trim();
+  if (!t) return { ok: false, error: 'Partner Tag is required (e.g. alayainsider-21)' };
+  // Typical format: <account>-<2 digits> (e.g. alayainsider-21). Tolerate other
+  // alphanumerics/underscores in the account part.
+  if (!/^[a-zA-Z0-9_\-]+-\d{2}$/.test(t)) {
+    return { ok: false, error: 'Partner Tag must look like <account>-21 (e.g. alayainsider-21)' };
+  }
+  if (!t.endsWith(STORES[store].tagSuffix)) {
+    return {
+      ok: true,
+      warning: `This store expects a tag ending in ${STORES[store].tagSuffix} (e.g. ${STORES[store].defaultTag}). The tag you entered ends differently — double-check it matches your ${STORES[store].label} Associates account.`,
+    };
+  }
+  return { ok: true };
+}
+
+// ─── OAuth2 token (cached per store, refreshed before expiry) ──────────────
 
 export async function fetchAccessToken(creds: CreatorsCredentials): Promise<string | null> {
+  const store = creds.store || DEFAULT_STORE;
   const body = JSON.stringify({
     grant_type: 'client_credentials',
     client_id: creds.clientId,
@@ -277,8 +321,8 @@ export async function fetchAccessToken(creds: CreatorsCredentials): Promise<stri
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (e: any) {
-    recordFailure({ code: 'NETWORK_ERROR', message: `Token endpoint unreachable: ${e.name || e.message}`, httpStatus: null });
-    log(`Token request network error: ${e.name || e.message} (${creds.tokenEndpoint})`);
+    recordFailure(store, { code: 'NETWORK_ERROR', message: `Token endpoint unreachable: ${e.name || e.message}`, httpStatus: null });
+    log(`[${store}] Token request network error: ${e.name || e.message} (${creds.tokenEndpoint})`);
     return null;
   }
 
@@ -289,80 +333,90 @@ export async function fetchAccessToken(creds: CreatorsCredentials): Promise<stri
   if (res.ok && json?.access_token) {
     const expiresIn = Number(json.expires_in) || 3600;
     const expiresAt = Date.now() + (expiresIn - 60) * 1000; // 60s safety buffer
-    setSetting(DB_KEYS.token, json.access_token);
-    setSetting(DB_KEYS.tokenExpiresAt, String(expiresAt));
+    setSetting(keyFor(store, 'token'), json.access_token);
+    setSetting(keyFor(store, 'tokenExpiresAt'), String(expiresAt));
     return json.access_token as string;
   }
 
   const code = json?.error || (res.status === 401 ? 'invalid_client' : 'TOKEN_REQUEST_FAILED');
   const message = json?.error_description || json?.message || text.slice(0, 300) || `HTTP ${res.status}`;
-  recordFailure({ code, message, httpStatus: res.status });
-  log(`Token request failed: HTTP ${res.status} code=${code} message=${message.slice(0, 200)}`);
-  setSetting(DB_KEYS.token, '');
-  setSetting(DB_KEYS.tokenExpiresAt, '');
+  recordFailure(store, { code, message, httpStatus: res.status });
+  log(`[${store}] Token request failed: HTTP ${res.status} code=${code} message=${message.slice(0, 200)}`);
+  setSetting(keyFor(store, 'token'), '');
+  setSetting(keyFor(store, 'tokenExpiresAt'), '');
   return null;
 }
 
-/** Cached access token; fetches when missing or within 60s of expiry. */
-export async function getAccessToken(): Promise<string | null> {
-  const creds = getCredentials();
+/** Cached access token for a store; fetches when missing or within 60s of expiry. */
+export async function getAccessToken(store: Store = DEFAULT_STORE): Promise<string | null> {
+  const creds = getCredentials(store);
   if (!creds) return null;
 
-  const cached = getSetting(DB_KEYS.token);
-  const expiresAt = parseInt(getSetting(DB_KEYS.tokenExpiresAt) || '0', 10);
+  const cached = getSetting(keyFor(store, 'token'));
+  const expiresAt = parseInt(getSetting(keyFor(store, 'tokenExpiresAt')) || '0', 10);
   if (cached && expiresAt > Date.now()) return cached;
 
   return fetchAccessToken(creds);
 }
 
-// ─── Diagnostics bookkeeping ────────────────────────────────────────────────
+// ─── Diagnostics bookkeeping (per store) ───────────────────────────────────
 
-export function recordFailure(err: { code: string; message: string; httpStatus?: number | null }) {
-  setSetting(DB_KEYS.lastError, JSON.stringify({ ...err, httpStatus: err.httpStatus ?? null }));
-  setSetting(DB_KEYS.lastErrorAt, new Date().toISOString());
+export function recordFailure(store: Store, err: { code: string; message: string; httpStatus?: number | null }) {
+  setSetting(keyFor(store, 'lastError'), JSON.stringify({ ...err, httpStatus: err.httpStatus ?? null }));
+  setSetting(keyFor(store, 'lastErrorAt'), new Date().toISOString());
 }
 
-export function recordSuccess() {
-  setSetting(DB_KEYS.lastSuccessAt, new Date().toISOString());
-  setSetting(DB_KEYS.lastError, '');
+export function recordSuccess(store: Store = DEFAULT_STORE) {
+  setSetting(keyFor(store, 'lastSuccessAt'), new Date().toISOString());
+  setSetting(keyFor(store, 'lastError'), '');
 }
 
-export function getDiagnostics() {
+export function getDiagnostics(store: Store = DEFAULT_STORE) {
+  const cfg = STORES[store];
+  const p = cfg.envPrefix;
+  const creds = getCredentials(store);
   return {
-    configured: isConfigured(),
-    source: getCredentials()?.source ?? null,
-    clientId: mask(getSetting(DB_KEYS.clientId) || env('CREATORS_CLIENT_ID')),
-    version: getSetting(DB_KEYS.version) || env('CREATORS_VERSION') || '',
-    partnerTag: getSetting(DB_KEYS.partnerTag) || env('CREATORS_PARTNER_TAG') || '',
-    marketplace: getSetting(DB_KEYS.marketplace) || env('CREATORS_MARKETPLACE') || DEFAULT_MARKETPLACE,
-    tokenEndpoint: getSetting(DB_KEYS.tokenEndpoint) || env('CREATORS_TOKEN_ENDPOINT') || '',
-    secretStored: !!getSetting(DB_KEYS.secretEnc) || !!env('CREATORS_CLIENT_SECRET'),
-    lastError: parseJson(getSetting(DB_KEYS.lastError)),
-    lastErrorAt: getSetting(DB_KEYS.lastErrorAt) || null,
-    lastSuccessAt: getSetting(DB_KEYS.lastSuccessAt) || null,
-    lastTest: parseJson(getSetting(DB_KEYS.lastTest)),
-    lastCronRun: getSetting(DB_KEYS.lastCronRun) || null,
-    lastCronSummary: parseJson(getSetting(DB_KEYS.lastCronSummary)),
+    store,
+    configured: !!creds,
+    source: creds?.source ?? null,
+    clientId: mask(getSetting(keyFor(store, 'clientId')) || env(`${p}CLIENT_ID`)),
+    version: getSetting(keyFor(store, 'version')) || env(`${p}VERSION`) || cfg.version,
+    partnerTag: getSetting(keyFor(store, 'partnerTag')) || env(`${p}PARTNER_TAG`) || '',
+    marketplace: getSetting(keyFor(store, 'marketplace')) || env(`${p}MARKETPLACE`) || cfg.marketplace,
+    tokenEndpoint: getSetting(keyFor(store, 'tokenEndpoint')) || env(`${p}TOKEN_ENDPOINT`) || '',
+    secretStored: !!getSetting(keyFor(store, 'secretEnc')) || !!env(`${p}CLIENT_SECRET`),
+    lastError: parseJson(getSetting(keyFor(store, 'lastError'))),
+    lastErrorAt: getSetting(keyFor(store, 'lastErrorAt')) || null,
+    lastSuccessAt: getSetting(keyFor(store, 'lastSuccessAt')) || null,
+    lastTest: parseJson(getSetting(keyFor(store, 'lastTest'))),
+    lastCronRun: getSetting(keyFor(store, 'lastCronRun')) || null,
+    lastCronSummary: parseJson(getSetting(keyFor(store, 'lastCronSummary'))),
   };
 }
 
-/** Persist the result of the hourly cron refresh (for /admin/amazon display). */
-export function recordCronRun(summary: object) {
-  setSetting(DB_KEYS.lastCronRun, new Date().toISOString());
-  setSetting(DB_KEYS.lastCronSummary, JSON.stringify(summary));
+/** Diagnostics for every store — the admin page renders one card per store. */
+export function getAllDiagnostics(): Record<Store, ReturnType<typeof getDiagnostics>> {
+  return { in: getDiagnostics('in'), us: getDiagnostics('us') };
 }
 
-/** Remove stored credentials + cached token + diagnostics (admin "clear"). */
-export function clearStoredCredentials() {
-  for (const key of [...CREDENTIAL_KEYS, DB_KEYS.lastError, DB_KEYS.lastErrorAt, DB_KEYS.lastTest]) {
+/** Persist the result of the hourly cron refresh for one store. */
+export function recordCronRun(summary: object, store: Store = DEFAULT_STORE) {
+  setSetting(keyFor(store, 'lastCronRun'), new Date().toISOString());
+  setSetting(keyFor(store, 'lastCronSummary'), JSON.stringify(summary));
+}
+
+/** Remove stored credentials + token + diagnostics for one store (admin "clear"). */
+export function clearStoredCredentials(store: Store = DEFAULT_STORE) {
+  const keys = [...credentialKeys(store), keyFor(store, 'lastError'), keyFor(store, 'lastErrorAt'), keyFor(store, 'lastTest')];
+  for (const key of keys) {
     try { getDb().prepare('DELETE FROM site_settings WHERE key = ?').run(key); } catch { /* best-effort */ }
   }
-  clearTokenCache();
+  clearTokenCache(store);
 }
 
-/** Save diagnostics from an interactive "test connection" run. */
-export function recordTestRun(result: object) {
-  setSetting(DB_KEYS.lastTest, JSON.stringify(result));
+/** Save diagnostics from an interactive "test connection" run for a store. */
+export function recordTestRun(result: object, store: Store = DEFAULT_STORE) {
+  setSetting(keyFor(store, 'lastTest'), JSON.stringify(result));
 }
 
 function mask(value: string): string {
@@ -403,28 +457,29 @@ export function normalizeItem(item: any): CreatorsItem | null {
 }
 
 /**
- * GetItems lookup against https://creatorsapi.amazon/catalog/v1/getItems.
- * Up to 10 ASINs per call. Never throws — returns structured errors.
+ * GetItems lookup for one store against
+ * https://creatorsapi.amazon/catalog/v1/getItems. Up to 10 ASINs per call.
+ * Never throws — returns structured errors.
  */
-export async function creatorsGetItems(asins: string[]): Promise<CreatorsGetItemsResult> {
+export async function creatorsGetItems(asins: string[], store: Store = DEFAULT_STORE): Promise<CreatorsGetItemsResult> {
   // Amazon caps GetItems at 10 ASINs per call — higher-level callers
   // (getLivePrices) chunk; here we defensively slice as well.
   const unique = ([...new Set(asins.map(normalizeAsin).filter(Boolean))] as string[]).slice(0, 10);
   if (unique.length === 0) return { items: [], errors: [], httpStatus: null };
 
-  const creds = getCredentials();
+  const creds = getCredentials(store);
   if (!creds) {
     return {
       items: [],
-      errors: [{ code: 'NO_CREDENTIALS', message: 'Creators API credentials are not configured yet.', httpStatus: null }],
+      errors: [{ code: 'NO_CREDENTIALS', message: `${STORES[store].label} Creators API credentials are not configured yet.`, httpStatus: null }],
       httpStatus: null,
     };
   }
 
-  const token = await getAccessToken();
+  const token = await getAccessToken(store);
   if (!token) {
     // fetchAccessToken already recorded the precise failure (e.g. invalid_client) — surface it.
-    const last = parseJson(getSetting(DB_KEYS.lastError)) as CreatorsError | null;
+    const last = parseJson(getSetting(keyFor(store, 'lastError'))) as CreatorsError | null;
     return {
       items: [],
       errors: [{
@@ -467,8 +522,8 @@ export async function creatorsGetItems(asins: string[]): Promise<CreatorsGetItem
     });
   } catch (e: any) {
     const err = { code: 'NETWORK_ERROR', message: `API unreachable: ${e.name || e.message}`, httpStatus: null as number | null };
-    recordFailure(err);
-    log(`GetItems network error: ${e.name || e.message}`);
+    recordFailure(store, err);
+    log(`[${store}] GetItems network error: ${e.name || e.message}`);
     return { items: [], errors: [err], httpStatus: null };
   }
 
@@ -478,11 +533,11 @@ export async function creatorsGetItems(asins: string[]): Promise<CreatorsGetItem
 
   // Retry once after refreshing the token (e.g. token expired mid-flight).
   if (res.status === 401) {
-    log(`GetItems returned 401 — refreshing token and retrying once.`);
+    log(`[${store}] GetItems returned 401 — refreshing token and retrying once.`);
     const fresh = await fetchAccessToken(creds);
     if (!fresh) {
       const err = { code: 'AUTH_FAILED', message: 'OAuth2 token rejected by Creators API.', httpStatus: res.status };
-      recordFailure(err);
+      recordFailure(store, err);
       return { items: [], errors: [err], httpStatus: res.status };
     }
     try {
@@ -495,20 +550,20 @@ export async function creatorsGetItems(asins: string[]): Promise<CreatorsGetItem
       const retryText = await retry.text().catch(() => '');
       let retryJson: any = null;
       try { retryJson = JSON.parse(retryText); } catch { /* not json */ }
-      return handleGetItemsResponse(retry, retryJson, retryText);
+      return handleGetItemsResponse(retry, retryJson, retryText, store);
     } catch (e: any) {
       const err = { code: 'NETWORK_ERROR', message: `Retry failed: ${e.name || e.message}`, httpStatus: null as number | null };
-      recordFailure(err);
+      recordFailure(store, err);
       return { items: [], errors: [err], httpStatus: null };
     }
   }
 
-  return handleGetItemsResponse(res, json, text);
+  return handleGetItemsResponse(res, json, text, store);
 }
 
-function handleGetItemsResponse(res: Response, json: any, text: string): CreatorsGetItemsResult {
+function handleGetItemsResponse(res: Response, json: any, text: string, store: Store): CreatorsGetItemsResult {
   if (res.ok && json) {
-    recordSuccess();
+    recordSuccess(store);
     const items = (json.itemResults?.items || []).map(normalizeItem).filter(Boolean) as CreatorsItem[];
     const errors: CreatorsError[] = (json.errors || []).map((e: any) => ({
       code: e.code || 'UNKNOWN',
@@ -523,13 +578,13 @@ function handleGetItemsResponse(res: Response, json: any, text: string): Creator
   const message = json?.message || (Array.isArray(json?.errors) ? json.errors[0]?.message : '') || text.slice(0, 300) || `HTTP ${res.status}`;
   const code = json?.reason || type.split('#').pop() || 'API_ERROR';
   const err = { code, message, httpStatus: res.status };
-  recordFailure(err);
-  log(`GetItems failed: HTTP ${res.status} code=${code} message=${message.slice(0, 200)}`);
+  recordFailure(store, err);
+  log(`[${store}] GetItems failed: HTTP ${res.status} code=${code} message=${message.slice(0, 200)}`);
   return { items: [], errors: [err], httpStatus: res.status };
 }
 
-/** Clear cached access token + diagnostics (used when credentials change). */
-export function clearTokenCache() {
-  setSetting(DB_KEYS.token, '');
-  setSetting(DB_KEYS.tokenExpiresAt, '');
+/** Clear cached access token + diagnostics for a store (used when credentials change). */
+export function clearTokenCache(store: Store = DEFAULT_STORE) {
+  setSetting(keyFor(store, 'token'), '');
+  setSetting(keyFor(store, 'tokenExpiresAt'), '');
 }

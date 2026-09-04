@@ -3,6 +3,7 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { v4 as uuid } from 'uuid';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
+import { resolveVisitorStore } from '@/lib/geo';
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -25,8 +26,9 @@ export async function GET(req: NextRequest) {
     LIMIT 8
   `).all(s, s, s, s);
 
-  // Enrich with live Amazon.in prices (batched, cached 1 hour, graceful fallback)
-  const products = await enrichProductsWithLivePrice(rawProducts as any[]);
+  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  const geo = resolveVisitorStore(req.headers);
+  const products = await enrichProductsWithLivePrice(rawProducts as any[], geo.store);
 
   const articles = db.prepare(`
     SELECT id, title, slug, excerpt, featured_image
