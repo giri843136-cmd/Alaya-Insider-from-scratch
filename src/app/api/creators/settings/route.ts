@@ -58,6 +58,8 @@ function cacheTable() {
  */
 export async function GET() {
   ensureDbReady();
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const snippet = getSetting(ONELINK_SETTING_KEY);
   const onelink = validateOneLinkSnippet(snippet);
   return NextResponse.json({

@@ -14,6 +14,8 @@ import { validateOneLinkSnippet, ONELINK_SETTING_KEY } from '@/lib/onelink';
  */
 export async function GET() {
   ensureDbReady();
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const raw = (getDb().prepare('SELECT value FROM site_settings WHERE key = ?').get(ONELINK_SETTING_KEY) as any)?.value || '';
   const v = validateOneLinkSnippet(raw);
   return NextResponse.json({
