@@ -14,6 +14,7 @@ interface AuthUser {
 const navItems = [
   { href: '/admin', icon: '◻', label: 'Dashboard' },
   { href: '/admin/products', icon: '☐', label: 'Products' },
+  { href: '/admin/import', icon: '⇪', label: 'Import CSV' },
   { href: '/admin/categories', icon: '≡', label: 'Categories' },
   { href: '/admin/brands', icon: '◎', label: 'Brands' },
   { href: '/admin/collections', icon: '❖', label: 'Collections' },

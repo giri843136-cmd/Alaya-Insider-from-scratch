@@ -81,6 +81,23 @@ Associates account is approved:
    Once GeoLite2 is installed (below), the same .com default serves every
    non-India visitor, with OneLink localizing their links.
 
+## Bulk product import (CSV)
+
+Admin → **Import CSV** (`/admin/import`) pastes a CSV and creates products as
+**drafts** (safe default — review in Admin → Products before publishing).
+
+Required columns: `name`, `category` (created if missing). Optional columns:
+`brand`, `short_description`, `why_we_recommend`, `best_for`, `pros`,
+`cons`, `tags`, `buying_advice`, `primary_image` (URL), `india_asin`,
+`us_asin`, `current_price`, `currency`, `rating`, `review_count`, `status`
+(`draft`|`published`), `seo_title`, `seo_description`. Pros/cons/tags are
+pipe (`|`) separated. `india_asin` / `us_asin` build the tagged
+amazon.in / amazon.com URLs automatically (`alayainsider-21` / `-20`).
+
+⚠️ Verify every ASIN in your browser before importing — the seeded catalog's
+ASINs were invalid on both marketplaces (see the audit note in “Adding the US
+store later”). Endpoint: `POST /api/products/import` (admin auth).
+
 ## Installing OneLink in admin
 
 OneLink rewrites Amazon anchors for the **9 secondary marketplaces** to each
