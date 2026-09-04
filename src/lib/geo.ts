@@ -2,20 +2,22 @@
  * Server-side visitor geo-detection for the dual-store routing:
  *
  *   IN → store 'in' (amazon.in, ₹, tag -21)
- *   US → store 'us' (amazon.com, $, tag -20)   — when the product has a US ASIN
- *                                                  and US credentials exist
- *   everything else → store 'in' by default; the OneLink script rewrites those
- *                     visitors' links to their local store with tag -20
- *   unknown → store 'in' (safe default)
+ *   every other DETECTED country (US, DE, GB, AE, …) → store 'us'
+ *     (amazon.com, $, tag -20) — the international default. OneLink's script
+ *     then rewrites those .com anchors to the visitor's local store, so a
+ *     German visitor ends up on amazon.de with -20. Products without a US
+ *     ASIN keep the .in rendering (they only exist on amazon.in).
+ *   unknown / not detected → store 'in' (safe default — see below)
  *
  * Detection chain (first hit wins):
- *   1. `CF-IPCountry` request header — the site is behind Cloudflare this gives
- *      a reliable, free, per-request country code with zero network calls.
+ *   1. `CF-IPCountry` request header — behind Cloudflare this gives a
+ *      reliable, free, per-request country code with zero network calls.
  *      (Verified 2026-09-04: alayainsider.com is served by Hostinger's hcdn,
  *      NOT Cloudflare — so this header is currently absent and detection falls
  *      through to MaxMind / the India default. Re-check after any CDN move.)
  *   2. MaxMind GeoLite2 local DB (data/GeoLite2-Country.mmdb) — no third-party
  *      API, no client-side lookup; used only when the header is absent.
+ *      Install it (see RUNBOOK "Install GeoLite2") to activate IP routing.
  *   3. Default: India.
  *
  * `x-test-geo` header overrides everything but is honored ONLY when
@@ -54,8 +56,9 @@ export function getGeoReader(): any {
 /** Country code (ISO-3166-1 alpha-2, uppercased) → visitor store. */
 export function countryToStore(country: string | null | undefined): VisitorStore {
   const c = (country || '').trim().toUpperCase();
-  if (c === 'US') return 'us';
-  return 'in'; // India + every other country default to the .in rendering
+  if (!c || c === 'ZZ') return 'in'; // empty / MaxMind's "unknown" designation → India default
+  if (c === 'IN') return 'in';
+  return 'us'; // every other country → amazon.com international default (-20); OneLink localizes
 }
 
 export function countryName(country: string | null | undefined): string {

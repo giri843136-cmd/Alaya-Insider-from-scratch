@@ -8,18 +8,20 @@ This is the step-by-step guide for **alayainsider.com**. The site is a
 | India 🇮🇳 | www.amazon.in | `alayainsider-21` | 3.2 (EU) | api.amazon.co.uk | INR ₹ |
 | United States 🇺🇸 | www.amazon.com | `alayainsider-20` | 3.1 (NA) | api.amazon.com | USD $ |
 
-Visitors are routed **server-side**: India → amazon.in + ₹, United States →
-amazon.com + $ (when the product has a US ASIN and US credentials are
-configured; otherwise they fall back to the .in link), and every other
-country → the .in rendering by default, with **Amazon OneLink** rewriting
-those visitors' links to their local store using the `-20` tag.
+Visitors are routed **server-side**: India → amazon.in + ₹; any other
+**detected** country (US, DE, GB, AE, …) → amazon.com + $ with the `-20` tag
+— the international default — and **Amazon OneLink** rewrites those `.com`
+anchors to each visitor's local store (a German visitor lands on amazon.de
+with `-20`). Products without a US ASIN — and visitors whose country cannot
+be detected — keep the .in rendering: those products only exist on
+amazon.in.
 
 Geo detection chain (first hit wins): `CF-IPCountry` header → MaxMind
 GeoLite2 local DB (`data/GeoLite2-Country.mmdb`, optional) → default India.
 As of 2026-09-04 the site is served by Hostinger's hcdn (not Cloudflare), so
-`CF-IPCountry` is currently absent — drop a GeoLite2-Country.mmdb file into
-`data/` (or set `GEOIP_DB_PATH`) to activate IP-based routing; until then
-visitors default to the India store and OneLink covers the rest.
+`CF-IPCountry` is currently absent — install GeoLite2 (see "Install
+GeoLite2") to activate IP-based routing; until then every visitor defaults to
+the India store (.in rendering).
 
 > ⚠️ **PA-API 5.0 no longer exists.** Amazon deprecated Product Advertising
 > API 5.0 on **April 30, 2026** and retired the endpoint on **May 15, 2026**
@@ -39,7 +41,7 @@ visitors default to the India store and OneLink covers the rest.
 - [ ] All Amazon links carry your real tag ending `-21` (`alayainsider-21`)
 - [ ] One test click lands on the right amazon.in product with your tag in the URL
 - [ ] No errors in `data/logs/creators-api.log` after 24h; hourly cron refreshes visible per store
-- [ ] (US optional) US visitors see $ + amazon.com links; every other country default .in + OneLink
+- [ ] (US optional) US visitors see $ + amazon.com links; other detected countries get the .com default that OneLink localizes
 
 > Timezone note: "as of" stamps show **IST** for India-store prices and **UTC**
 > for US-store prices (each price is stamped in its own store's timezone).
@@ -66,6 +68,8 @@ Associates account is approved:
    automatically, so most seeded products are already dual-store.
 6. US visitors now see $ prices + amazon.com links with `alayainsider-20`.
    Products without a US listing fall back to the .in price/link automatically.
+   Once GeoLite2 is installed (below), the same .com default serves every
+   non-India visitor, with OneLink localizing their links.
 
 ## Installing OneLink in admin
 
@@ -144,7 +148,33 @@ keys; Amazon explicitly states they will not work.
 5. Check `data/logs/creators-api.log` (server-side only) — lines are prefixed
    `[in]` / `[us]` per store.
 6. Geo simulation (dev only): send header `x-test-geo: US` to see the US
-   rendering, `x-test-geo: DE` to see the default .in rendering.
+   rendering, `x-test-geo: DE` to see the .com international default (products
+   with a US ASIN), `x-test-geo: IN` for the India rendering.
+
+---
+
+## Install GeoLite2 (activate per-country routing)
+
+Routing is India-first until a country can be detected per request. Detection
+is free and stays entirely server-side (no third-party geo API, no
+client-side lookup): drop a MaxMind **GeoLite2-Country.mmdb** into
+`data/GeoLite2-Country.mmdb` (or point `GEOIP_DB_PATH` at it). Until the file
+exists every visitor is treated as India (.in rendering); once installed,
+non-India visitors get the amazon.com default (`-20`) that OneLink localizes
+for their local marketplace.
+
+1. Create a free MaxMind account: maxmind.com → GeoLite2 → Sign up.
+2. Account → **Manage License Keys** → generate a key.
+3. On the server, download + install the DB (≈6 MB):
+   ```bash
+   node scripts/install-geolite2.js --license-key=XXXXXXXX
+   ```
+4. Restart the app (`pm2 restart <app>`). No code changes — `src/lib/geo.ts`
+   picks the file up on the first request.
+
+Verify with a real IP: `curl -s -H 'x-forwarded-for: 1.2.3.4' …` is dev-only;
+simplest is the smoke-test header `x-test-geo: DE|US|IN` on a dev build, or a
+VPN test in production.
 
 ---
 
@@ -204,7 +234,8 @@ Fallback mode is always one click away and is safe/compliant:
 | HTTP 429 throttling | Expected occasionally under bursts; the 1-hour cache absorbs it. Don't raise request volume — the cache refresh cadence already exceeds requirements. |
 | Product shows fallback text after saving keys | Cache retains failed lookups for 60s per store. Wait a minute, or run "Refresh all prices now". |
 | Secret decryption error in logs | `AUTH_SECRET` changed after saving the secret → re-enter the Credential Secret once. |
-| US visitor still sees ₹ | Product has no US ASIN (no `us_affiliate_url` and no amazon.com `global_affiliate_url`) → intentional .in fallback. Add the US URL in the product editor. |
+| International visitor still sees ₹ | Product has no US ASIN (no `us_affiliate_url` and no amazon.com `global_affiliate_url`) → intentional .in fallback (the product only exists on amazon.in). Add the US URL in the product editor. |
+| International visitor gets .in links for everything | Country not detected (no GeoLite2 DB, no CF header) → everyone currently defaults to India. Install GeoLite2 (see above) to activate per-country routing. |
 | OneLink "Installed" but links not rewritten | Confirm product anchors are direct amazon.in/com URLs (they are — the `/go/` redirector was removed for Amazon links) and the snippet src host is amazon-adsystem.com. |
 | Page loads but price empty / stale | Confirm the product row has an affiliate URL for that store. Products without one intentionally show fallback text. |
 
@@ -236,7 +267,7 @@ Fallback mode is always one click away and is safe/compliant:
 |---|---|
 | Store definitions (in/us, tags, token endpoints) | `src/lib/stores.ts` |
 | Creators API client (OAuth2 per store, GetItems, encryption, diagnostics) | `src/lib/creators-api.ts` |
-| Geo detection (CF-IPCountry → MaxMind → India) | `src/lib/geo.ts` |
+| Geo detection (CF-IPCountry → MaxMind → India default; non-India → .com) | `src/lib/geo.ts` |
 | Price cache + page helpers (per-store 1h TTL, ASIN resolution, direct URLs) | `src/lib/amazon-price.ts`, `src/lib/price-format.ts` |
 | Product JSON-LD builder (store-consistent, omit-when-no-price) | `src/lib/product-schema.ts` |
 | OneLink sanitizer + root-layout injection | `src/lib/onelink.ts`, `src/lib/onelink-server.ts`, `src/app/layout.tsx` |

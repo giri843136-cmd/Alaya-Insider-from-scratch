@@ -1,6 +1,8 @@
 /**
- * Geo-detection tests for the dual-store routing matrix:
- *   IN → in, US → us, DE/other → in (default), unknown → in (default).
+ * Geo-detection tests for the dual-store routing matrix (Stage 4):
+ *   IN → in, every other detected country (US, DE, GB, …) → us (the .com
+ *   international default that OneLink localizes), unknown / undetected → in
+ *   (safe default while GeoLite2 is absent).
  * The x-test-geo header must be honored only outside production; the
  * CF-IPCountry header is the preferred source; MaxMind is the fallback.
  */
@@ -19,17 +21,17 @@ describe('countryToStore', () => {
     expect(countryToStore('us')).toBe('us');
   });
 
-  it('maps every other country to in (default rendering + OneLink)', () => {
-    for (const c of ['DE', 'FR', 'GB', 'JP', 'BR', 'AU', 'SG', 'CA']) {
-      expect(countryToStore(c)).toBe('in');
+  it('maps every other detected country to us (international default + OneLink)', () => {
+    for (const c of ['DE', 'FR', 'GB', 'JP', 'BR', 'AU', 'SG', 'CA', 'AE']) {
+      expect(countryToStore(c)).toBe('us');
     }
   });
 
-  it('maps unknown/empty to in', () => {
+  it('maps unknown/empty to in (safe default while GeoLite2 is absent)', () => {
     expect(countryToStore('')).toBe('in');
     expect(countryToStore(null)).toBe('in');
     expect(countryToStore(undefined)).toBe('in');
-    expect(countryToStore('ZZ')).toBe('in');
+    expect(countryToStore('ZZ')).toBe('in'); // MaxMind "unknown" designation
   });
 });
 
@@ -38,11 +40,19 @@ describe('resolveVisitorStore', () => {
 
   afterEach(() => { process.env.NODE_ENV = prev; });
 
-  it('uses CF-IPCountry when present (production)', () => {
+  it('uses CF-IPCountry when present (production): DE → us international default', () => {
     process.env.NODE_ENV = 'production';
-    const r = resolveVisitorStore(headersObj({ 'cf-ipcountry': 'US', 'x-test-geo': 'DE' }));
+    const r = resolveVisitorStore(headersObj({ 'cf-ipcountry': 'DE', 'x-test-geo': 'US' }));
     expect(r.store).toBe('us');
-    expect(r.country).toBe('US');
+    expect(r.country).toBe('DE');
+    expect(r.method).toBe('cf-ipcountry');
+  });
+
+  it('CF-IPCountry IN → in store', () => {
+    process.env.NODE_ENV = 'production';
+    const r = resolveVisitorStore(headersObj({ 'cf-ipcountry': 'IN' }));
+    expect(r.store).toBe('in');
+    expect(r.country).toBe('IN');
     expect(r.method).toBe('cf-ipcountry');
   });
 
@@ -64,12 +74,15 @@ describe('resolveVisitorStore', () => {
   it('honors x-test-geo outside production (dev/test only)', () => {
     process.env.NODE_ENV = 'test';
     const r = resolveVisitorStore(headersObj({ 'x-test-geo': 'DE' }));
-    expect(r.store).toBe('in');
+    expect(r.store).toBe('us'); // DE now gets the .com international default
     expect(r.method).toBe('test-header');
     expect(r.country).toBe('DE');
 
     const r2 = resolveVisitorStore(headersObj({ 'x-test-geo': 'US' }));
     expect(r2.store).toBe('us');
+
+    const r3 = resolveVisitorStore(headersObj({ 'x-test-geo': 'IN' }));
+    expect(r3.store).toBe('in');
   });
 
   it('prefers x-test-geo over CF-IPCountry outside production', () => {

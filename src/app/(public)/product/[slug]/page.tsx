@@ -40,7 +40,8 @@ async function getProduct(slug: string) {
   const related = db.prepare(`SELECT p.*, b.name as brand_name, c.name as category_name FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id
     WHERE p.category_id = ? AND p.id != ? AND p.status = 'published' AND p.deleted_at IS NULL LIMIT 4`).all(product.category_id, product.id);
 
-  // Geo-aware: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  // Geo-aware: India → .in/₹; any detected non-India country → .com/$ (or a
+  // .com fallback box when no US price); undetected visitors → .in + OneLink.
   const hdrs = await headers();
   const geo = resolveVisitorStore(hdrs);
 

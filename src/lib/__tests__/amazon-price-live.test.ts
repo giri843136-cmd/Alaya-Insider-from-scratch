@@ -269,8 +269,8 @@ describe('getLivePrices — batching and enrichment', () => {
     expect(enriched[0].amazon_url).toContain('tag=');
   });
 
-  it('US fails → India serves: no US listing falls back to the India price + .in link', async () => {
-    // US GetItems returns nothing for the product (no US listing on amazon.com).
+  it('product exists only on .in (no US listing) → India price + .in link, never an error', async () => {
+    // US GetItems returns nothing for the product (no US ASIN on the product).
     installFetch({
       tokenBody: goodToken,
       getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } },
@@ -288,18 +288,44 @@ describe('getLivePrices — batching and enrichment', () => {
     expect(enriched[0].amazon_url).not.toContain('amazon.com');
   });
 
-  it('US visitor + product with US ASIN but US not configured → India fallback, no error', async () => {
+  it('product HAS a US ASIN but its US lookup fails → fallback box stays on .com (-20), no ₹/.in hybrid', async () => {
+    // US GetItems returns nothing for B0USASIN01 while the India ASIN resolves
+    // to a live price — the visitor must still be sent to the .com listing so
+    // OneLink can localize it, not to a ₹ box anchored at amazon.in.
+    installFetch({
+      tokenBody: goodToken,
+      getItemsBody: { itemResults: { items: [sampleItem('B0INASIN01')] } },
+    });
+    const products = [{
+      id: '1', name: 'A',
+      india_affiliate_url: 'https://www.amazon.in/dp/B0INASIN01',
+      us_affiliate_url: 'https://www.amazon.com/dp/B0USASIN01?tag=alayainsider-20',
+    }];
+    const enriched = await mod.enrichProductsWithLivePrice(products, 'us');
+    expect(enriched[0].live_price).toBeNull(); // fallback price box
+    expect(enriched[0].live_available).toBe(false);
+    expect(enriched[0].live_store).toBe('us');
+    expect(enriched[0].amazon_url).toContain('www.amazon.com');
+    expect(enriched[0].amazon_url).not.toContain('amazon.in');
+    // The .in link is still carried for the India store / fallback surfaces.
+    expect(enriched[0].amazon_in_url).toContain('www.amazon.in');
+  });
+
+  it('US (international) store not configured → product with US ASIN gets a .com fallback box, no error', async () => {
     const keep = { ...process.env };
     delete process.env.CREATORS_CLIENT_ID;
     delete process.env.CREATORS_CLIENT_SECRET;
     delete process.env.CREATORS_US_CLIENT_ID;
     delete process.env.CREATORS_US_CLIENT_SECRET;
-    // Both stores' creds cleared → clean fallback box.
+    // Both stores' creds cleared → clean fallback box on the .com anchor.
     installFetch({ tokenBody: goodToken });
     const products = [{ id: '1', name: 'A', india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH', us_affiliate_url: 'https://www.amazon.com/dp/B0USASIN01' }];
     const enriched = await mod.enrichProductsWithLivePrice(products, 'us');
     expect(enriched[0].live_price).toBeNull();
     expect(enriched[0].live_available).toBe(false);
+    expect(enriched[0].live_store).toBe('us');
+    expect(enriched[0].amazon_url).toContain('www.amazon.com');
+    expect(enriched[0].amazon_url).not.toContain('amazon.in');
     Object.assign(process.env, keep);
   });
 

@@ -316,8 +316,12 @@ function applyResult(store: Store, asin: string, result: { items: any[]; errors:
 
 /**
  * Attach live display fields to an array of product rows in one batched API
- * round-trip per store. For the US store, products without a US ASIN (or whose
- * US lookup fails) fall back to their India price/link — never an error.
+ * round-trip per store. For the US (international) store, products WITHOUT a
+ * US ASIN fall back to their India price/link (they only exist on .in);
+ * products WITH a US ASIN whose US price is unavailable (store unconfigured,
+ * lookup failed, out of stock) get a fallback price box anchored at the .com
+ * listing (-20) so OneLink can localize it — never a ₹/.in hybrid for a
+ * non-India visitor, and never an error.
  *
  * Each product row gains:
  *   live_price / live_currency / live_fetched_at / live_available
@@ -347,23 +351,22 @@ export async function enrichProductsWithLivePrice(products: any[], store: Store 
     if (store === 'us' && usAsin) {
       const usLive = liveMap.get(usAsin);
       const hasUsPrice = usLive?.price != null && usLive.price > 0;
-      // US display when a real US price exists; otherwise India fallback.
+      // Real US price → USD + .com anchor. Otherwise the product HAS a US
+      // listing but its price is unavailable (store unconfigured / lookup
+      // failed / out of stock): serve a fallback price box whose anchor stays
+      // on the .com listing with -20 so OneLink can localize it for
+      // non-India visitors — the .in price is NOT shown against a .com link.
       if (hasUsPrice) {
         return { ...p, ...liveDisplayFields(usLive, 'us'), live_store: 'us', live_asin: usAsin,
           amazon_url: productUsUrl(p), amazon_in_url: productIndiaUrl(p), amazon_us_url: productUsUrl(p) };
-      }
-      const inLive = inAsin ? indiaMap.get(inAsin) : null;
-      const hasInPrice = inLive?.price != null && inLive.price > 0;
-      if (hasInPrice) {
-        return { ...p, ...liveDisplayFields(inLive, 'in'), live_store: 'in', live_asin: inAsin,
-          amazon_url: productIndiaUrl(p), amazon_in_url: productIndiaUrl(p), amazon_us_url: productUsUrl(p) };
       }
       return { ...p, ...liveDisplayFields(null), live_store: 'us', live_asin: usAsin,
         amazon_url: productUsUrl(p), amazon_in_url: productIndiaUrl(p), amazon_us_url: productUsUrl(p) };
     }
 
     // store === 'us' but the product has no US ASIN — serve the India price
-    // (fetched in the same batch) so US visitors still see a live box.
+    // (fetched in the same batch) so international visitors still see a live
+    // box on the only marketplace where the product exists.
     const inLive = inAsin ? indiaMap.get(inAsin) ?? liveMap.get(inAsin) : null;
     return { ...p, ...liveDisplayFields(inLive, 'in'), live_store: 'in', live_asin: inAsin,
       amazon_url: productIndiaUrl(p), amazon_in_url: productIndiaUrl(p), amazon_us_url: productUsUrl(p) };
