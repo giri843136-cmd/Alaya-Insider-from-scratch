@@ -14,6 +14,19 @@ export const US_TAG = 'alayainsider-20';
 export const inUrl = (asin: string) => `https://www.amazon.in/dp/${asin}?tag=${IN_TAG}`;
 export const usUrl = (asin: string) => `https://www.amazon.com/dp/${asin}?tag=${US_TAG}`;
 
+/**
+ * Maps an apply-plan status kind to the value the products.status column
+ * actually accepts. The plan labels are 'archive' / 'draft', but the schema's
+ * CHECK constraint spells the archived value 'archived' — writing 'archive'
+ * makes SQLite throw CHECK constraint failed and roll back the whole apply
+ * (this is the bug that 500'd POST /api/products/apply-amazon-fixes while the
+ * dry-run preview kept working).
+ */
+export const STATUS_VALUE: Record<string, string> = {
+  archive: 'archived',
+  draft: 'draft',
+};
+
 /** slug → verified amazon.in ASIN (12) */
 export const IN_FIXES: Record<string, string> = {
   'aesop-resurrection-hand-wash': 'B01MDVOM5S',

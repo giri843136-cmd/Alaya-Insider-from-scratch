@@ -1,6 +1,6 @@
 import {
   IN_FIXES, US_FIXES, US_NEUTRALIZE, ARCHIVE_NO_LISTING, DRAFT_COM_ONLY,
-  inUrl, usUrl, IN_TAG, US_TAG,
+  STATUS_VALUE, inUrl, usUrl, IN_TAG, US_TAG,
 } from '@/lib/amazon-link-fixes';
 
 describe('amazon-link-fixes maps', () => {
@@ -39,5 +39,20 @@ describe('amazon-link-fixes maps', () => {
   it('has no duplicate keys inside each fix map', () => {
     expect(new Set(Object.keys(IN_FIXES)).size).toBe(Object.keys(IN_FIXES).length);
     expect(new Set(Object.keys(US_FIXES)).size).toBe(Object.keys(US_FIXES).length);
+  });
+
+  it('maps plan status kinds to values the products.status CHECK accepts', () => {
+    // Regression: the apply endpoint used the plan labels ('archive'/'draft')
+    // directly as DB statuses, but the schema CHECK only accepts 'archived' —
+    // so every apply 500'd with CHECK constraint failed while dry-run worked.
+    expect(STATUS_VALUE.archive).toBe('archived');
+    expect(STATUS_VALUE.draft).toBe('draft');
+
+    const validStatuses = ['draft', 'in_review', 'ready', 'published', 'archived', 'out_of_stock', 'expired'];
+    for (const value of Object.values(STATUS_VALUE)) {
+      expect(validStatuses).toContain(value);
+    }
+    // The plan label itself must never be written as a status.
+    expect(validStatuses).not.toContain('archive');
   });
 });

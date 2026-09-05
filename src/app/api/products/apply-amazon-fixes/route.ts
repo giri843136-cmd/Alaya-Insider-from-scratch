@@ -7,7 +7,7 @@ import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import {
   IN_FIXES, US_FIXES, US_NEUTRALIZE, ARCHIVE_NO_LISTING, DRAFT_COM_ONLY,
-  inUrl, usUrl,
+  STATUS_VALUE, inUrl, usUrl,
 } from '@/lib/amazon-link-fixes';
 
 /**
@@ -107,9 +107,11 @@ export async function POST(req: NextRequest) {
         affiliate_url = CASE WHEN affiliate_url LIKE '%amazon.com%' THEN india_affiliate_url ELSE affiliate_url END,
         global_affiliate_url = CASE WHEN global_affiliate_url LIKE '%amazon.com%' THEN india_affiliate_url ELSE global_affiliate_url END,
         updated_at = datetime('now') WHERE slug = ?`);
+    // Plan kinds are internal labels ('archive'/'draft'); STATUS_VALUE maps
+    // them to values the products.status CHECK actually accepts.
     const setStatus = db.prepare(`
       UPDATE products SET status = ?,
-        archived_at = CASE WHEN ? = 'archived' THEN datetime('now') ELSE archived_at END,
+        archived_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END,
         updated_at = datetime('now') WHERE slug = ?`);
 
     const tx = db.transaction(() => {
@@ -117,7 +119,12 @@ export async function POST(req: NextRequest) {
         if (p.kind === 'in') setIn.run(p.value, p.slug);
         else if (p.kind === 'us') setUs.run(p.value, p.slug);
         else if (p.kind === 'neutralize') neutralize.run(p.slug);
-        else setStatus.run(p.kind, p.kind, p.slug);
+        else {
+          // 'archive'/'draft' plan kinds -> real status; archived_at follows
+          // the status actually written (set on 'archived', cleared otherwise).
+          const value = STATUS_VALUE[p.kind] ?? 'draft';
+          setStatus.run(value, value === 'archived' ? 1 : 0, p.slug);
+        }
       }
     });
     tx();
