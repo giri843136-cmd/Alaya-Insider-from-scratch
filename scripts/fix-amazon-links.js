@@ -227,7 +227,9 @@ const tx = db.transaction(() => {
         global_affiliate_url = CASE WHEN global_affiliate_url LIKE '%amazon.com%' THEN india_affiliate_url ELSE global_affiliate_url END,
         updated_at = datetime('now')
     WHERE slug = ?`);
-  const setStatus = db.prepare(`UPDATE products SET status = ?, archived_at = CASE WHEN ? = 'archived' THEN datetime('now') ELSE archived_at END, updated_at = datetime('now') WHERE slug = ?`);
+  // Mirror the admin route: archived_at is stamped only when the product is
+  // actually archived, and cleared when it moves back to draft.
+  const setStatus = db.prepare(`UPDATE products SET status = ?, archived_at = CASE WHEN ? = 'archived' THEN datetime('now') ELSE NULL END, updated_at = datetime('now') WHERE slug = ?`);
   for (const p of plan) {
     if (p.action === 'set .in URL') setIn.run(p.want, p.slug);
     else if (p.action === 'set .com URL') setUs.run(p.want, p.slug);
