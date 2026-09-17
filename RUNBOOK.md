@@ -428,16 +428,27 @@ Creators API credential secrets are stored encrypted in the DB (keyed by
 
 ## Compliance notes (Amazon policy)
 
-- **Refresh cadence**: prices refresh hourly (1-hour cache per store) **and** carry an
-  "as of …" stamp on product pages (IST for India, UTC for US) — exceeds the hourly requirement.
-- **No scraping**: the old HTML-scraping price fetcher was removed. All live
-  data comes from the official Creators API.
+- **PRICE_ENRICHMENT_ENABLED=1 may only be set together with official-API-sourced
+  display** — i.e. when the enricher is re-enabled, every displayed price/availability
+  value must come from the official Creators API (never editorial/seeded/CSV values),
+  and the TASK 3/5 removals (JSON-LD offers/ratings, price-claim copy) must be
+  revisited in the same change. **CSV/admin entry must never repopulate
+  `current_price`/`rating`/`review_count`** — those columns stay NULL until an
+  official source exists (see `scripts/NULL-commercial-fields.ts`).
+- **Refresh cadence**: prices refresh hourly (1-hour cache per store). While
+  `PRICE_ENRICHMENT_ENABLED` is unset the enricher is a display no-op and nothing
+  is shown; the cache only feeds the admin/ops surfaces.
+- **No scraping**: all live data comes from the official Creators API over HTTPS.
+  This codebase never fetches, crawls or parses amazon.com/.in HTML.
 - **Images**: the site displays its own editorial product images; the admin
   connection test hotlinks Amazon CDN images (never re-hosted/downloaded).
-- **Ratings**: the Creators API does not return star-ratings in responses, so
-  rating/review counts continue to come from your editorial database fields.
+- **Ratings**: no star ratings or review counts are displayed anywhere — the
+  editorial DB values were quarantined (TASK 4) and the Creators API does not
+  return them. Keep it that way until an official source is approved for display.
 - **Disclosure**: all outbound buttons are `rel="nofollow sponsored"`,
-  `target="_blank"`, and the FTC/Associates disclosure is rendered with PaidLinkTag.
+  `target="_blank"`, with the exact sentence "As an Amazon Associate I earn from
+  qualifying purchases." rendered adjacent to every CTA (plus the `(paid link)`
+  PaidLinkTag label).
 - **OneLink**: product links are direct amazon.in/amazon.com anchors (no `/go/`
   internal redirector), so OneLink can rewrite them for secondary markets.
 - **Secrets**: Credential Secret is encrypted at rest (AES-256-GCM keyed by

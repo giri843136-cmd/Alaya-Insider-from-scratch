@@ -27,7 +27,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
     ORDER BY cp.sort_order
   `).all(collection.id);
 
-  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  // Geo-aware enrichment: India → .in, US → .com (fallback .in), others → .in.
   const hdrs = await headers();
   const geo = resolveVisitorStore(hdrs);
   const products = await enrichProductsWithLivePrice(rawProducts as any[], geo.store);

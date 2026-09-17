@@ -11,8 +11,8 @@ import { resolveVisitorStore } from '@/lib/geo';
 // Geo-aware rendering (visitor store) requires per-request evaluation.
 export const dynamic = 'force-dynamic';
 
-// Direct Amazon anchor (OneLink-friendly —
-// never routed through /go/ so OneLink can rewrite for secondary markets).
+// Direct Amazon anchor (never routed through /go/ —
+// affiliate URLs stay direct, tagged and uncloaked).
 const ctaUrl = (p: any) => p.amazon_url || p.india_affiliate_url || '';
 
 export default async function ComparisonPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -37,7 +37,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
       }))
     : [];
 
-  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  // Geo-aware enrichment: India → .in, US → .com (fallback .in), others → .in.
   const hdrs = await headers();
   const geo = resolveVisitorStore(hdrs);
   const products = await enrichProductsWithLivePrice(rawProducts, geo.store);
@@ -65,6 +65,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                   {p.cta_text || 'Check Price'}
                 </CtaLink>
                 <PaidLinkTag className="mt-1" />
+                <p className="text-[10px] text-gray-400 mt-1">As an Amazon Associate I earn from qualifying purchases.</p>
               </div>
             ))}
           </div>
@@ -107,6 +108,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                         {p.cta_text || 'Check Price'}
                       </CtaLink>
                       <PaidLinkTag className="mt-1" />
+                      <p className="text-[10px] text-gray-400 mt-1">As an Amazon Associate I earn from qualifying purchases.</p>
                     </td>
                   ))}
                 </tr>

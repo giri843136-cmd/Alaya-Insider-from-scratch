@@ -47,7 +47,7 @@ async function getHomeData() {
   (db.prepare('SELECT key, value FROM hero_settings').all() as any[]).forEach((s: any) => { heroSettings[s.key] = s.value; });
 
   // Geo-aware: India → .in/₹, US → .com/$ (fallback to .in when no US ASIN),
-  // everywhere else → .in default (OneLink rewrites to local stores).
+  // everywhere else → .in default (direct tagged links for all visitors).
   const hdrs = await headers();
   const geo = resolveVisitorStore(hdrs);
   const enrichWithPrices = (items: any[]) => enrichProductsWithLivePrice(items, geo.store);

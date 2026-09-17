@@ -109,7 +109,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     ORDER BY p.is_featured DESC, p.created_at DESC
   `).all(category.id, category.id, category.id) as any[];
 
-  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  // Geo-aware enrichment: India → .in, US → .com (fallback .in), others → .in.
   const hdrs = await headers();
   const geo = resolveVisitorStore(hdrs);
   const enrichedProducts = await enrichProductsWithLivePrice(products as any[], geo.store);

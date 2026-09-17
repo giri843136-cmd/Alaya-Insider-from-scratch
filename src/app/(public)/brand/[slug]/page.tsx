@@ -24,7 +24,7 @@ export default async function BrandPage({ params }: { params: Promise<{ slug: st
     ORDER BY p.is_featured DESC, p.created_at DESC
   `).all(brand.id);
 
-  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
+  // Geo-aware enrichment: India → .in, US → .com (fallback .in), others → .in.
   const hdrs = await headers();
   const geo = resolveVisitorStore(hdrs);
   const products = await enrichProductsWithLivePrice(rawProducts as any[], geo.store);
