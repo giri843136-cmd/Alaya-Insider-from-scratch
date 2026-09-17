@@ -322,8 +322,9 @@ console.log('rows deleted:', out.changes);
 ```
 
 Replace `<ip-or-email>` with the exact locked identifier (the account key is
-the lowercased login email/username; the IP key is the leftmost
-X-Forwarded-For value, or `shared:untrustable-ip` for requests that arrived
+the lowercased login email/username; the IP key is the single X-Forwarded-For
+address nginx forwarded — one element only, multi-element headers are
+rejected as spoofed — or `shared:untrustable-ip` for requests that arrived
 without a parseable one). Deleting the account row only clears the account
 lock; delete the IP row too if the source IP was also locked. Never run this
 as routine cleanup — it is for "I locked myself out" moments.
@@ -344,6 +345,21 @@ console.log('expired rows deleted:', out.changes);
 "
 ```
 
+**Why `X-Forwarded-For` must be OVERWRITTEN, never appended (FIX D).**
+`$proxy_add_x_forwarded_for` APPENDS the proxy's view of its peer to whatever
+the client already sent — including a header the attacker invented. A request
+sent with `X-Forwarded-For: 8.8.8.8` would reach the app as
+`8.8.8.8, <hcdn-ip>, <nginx-ip>`; any code reading the leftmost (or any)
+element of that chain reads an attacker-chosen value, so the per-IP login
+lockout could be bypassed with a single header.
+`scripts/setup-nginx.sh` therefore sets
+`proxy_set_header X-Forwarded-For $remote_addr;` (overwrite). The app then
+rejects ANY multi-element XFF header as spoofed (`IP_UNTRUSTABLE`) and
+buckets those requests together — so even a mis-configured nginx cannot
+resurrect the bypass. Never reintroduce `$proxy_add_x_forwarded_for` in
+front of this app, and never use any `X-Forwarded-*` value for an
+authorization decision.
+
 Related hardening in the same change: the app **refuses to start** in
 production without `AUTH_SECRET` (no fallback secret exists anymore). If the
 app exits at boot with `AUTH_SECRET is not set`, generate one and add it to
@@ -360,6 +376,29 @@ node -e "console.log('AUTH_SECRET length=' + (process.env.AUTH_SECRET||'').trim(
 # run via pm2 so it reads the app's real environment:
 pm2 env 0 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const m=d.match(/^AUTH_SECRET: (.*)$/m);console.log('AUTH_SECRET length='+(m?m[1].trim().length:0))})"
 ```
+
+**Keep the env file OUTSIDE the repository (recommended).** `.env` is
+gitignored and currently untracked (`git ls-files .env` prints nothing), but
+gitignore is not a guarantee — one careless `git add -f .env` would capture
+every secret in a commit, forever. The robust setup keeps the real env file
+outside the repo and leaves only a symlink behind:
+
+```bash
+# One-time, on the VPS:
+sudo install -d -m 700 /etc/alayainsider
+sudo install -m 600 /dev/null /etc/alayainsider/alaya.env
+sudo mv /path/to/alaya-insider/.env /etc/alayainsider/alaya.env   # move existing file out
+sudo ln -sf /etc/alayainsider/alaya.env /path/to/alaya-insider/.env
+```
+
+Next still reads the project `.env` (the symlink resolves outside the repo),
+while git can only ever track the symlink — a forced add would commit a path,
+never the values. Alternative without a symlink: export the vars from the
+external file before pm2 starts the app
+(`set -a; . /etc/alayainsider/alaya.env; set +a; pm2 restart alayainsider --update-env`).
+The same hygiene applies to `ADMIN_SEED_PASSWORD` and `CRON_SECRET`; the
+Creators API credential secrets are stored encrypted in the DB (keyed by
+`AUTH_SECRET`) and must never enter the repo either.
 
 ---
 

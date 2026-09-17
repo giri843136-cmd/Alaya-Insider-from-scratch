@@ -3,15 +3,25 @@
 
 const store = new Map<string, { count: number; resetAt: number }>();
 
-// Clean expired entries periodically
-setInterval(() => {
-  const now = Date.now();
-  const keys = Array.from(store.keys());
-  keys.forEach(key => {
-    const val = store.get(key);
-    if (val && val.resetAt < now) store.delete(key);
-  });
-}, 60000);
+// Clean expired entries periodically. The timer is unref'd so importing this
+// module never keeps a Node process (jest worker, script) alive; under jest
+// the clock is faked/absent, so we skip the interval entirely there.
+const canSweep =
+  typeof setTimeout === 'function' &&
+  typeof (setTimeout as unknown as { ___promisify__?: unknown }).___promisify__ === 'undefined' &&
+  !process.env.JEST_WORKER_ID;
+
+if (canSweep) {
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    const keys = Array.from(store.keys());
+    keys.forEach(key => {
+      const val = store.get(key);
+      if (val && val.resetAt < now) store.delete(key);
+    });
+  }, 60000);
+  (sweep as unknown as { unref?: () => void }).unref?.();
+}
 
 export function rateLimit(
   key: string,
@@ -35,24 +45,27 @@ export function rateLimit(
 }
 
 /**
- * Client IP for rate-limiting and per-IP login lockout (TASK 2 FIX B).
+ * Client IP for rate-limiting and per-IP login lockout (TASK 2 FIX B + FIX D).
  *
  * Deployment chain: client → hcdn (Hostinger CDN) → nginx (setup-nginx.sh:
- * `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`) → Node.
- * hcdn's exact header behaviour is not publicly documented, so we trust ONLY
- * the header our own nginx demonstrably sets and only its LEFTMOST value —
- * that is the client IP as hcdn handed it to nginx. Anything appended to the
- * right of it (including anything a client sent) is appended by proxies we
- * don't control and is spoofable, so it is ignored.
+ * `proxy_set_header X-Forwarded-For $remote_addr` — OVERWRITE, not append)
+ * → Node.
+ *
+ * FIX D: nginx overwrites X-Forwarded-For with the single address hcdn handed
+ * it, so a correctly-configured edge produces a ONE-element header. A header
+ * with MORE than one comma-separated element therefore cannot have passed
+ * through our overwrite (client-injected at the last hop, or an nginx running
+ * an old config) — it is treated as spoofed and the request is marked
+ * IP_UNTRUSTABLE even if the leftmost value parses as a valid IP.
  *
  *  - X-Real-IP is deliberately NOT trusted: it is trivially settable by the
  *    client, and nginx overwrites it anyway.
  *  - X-Forwarded-Host / Forwarded (RFC 7239) are not set anywhere in this
  *    stack, so they are not read.
  *
- * A missing or unparseable value returns IP_UNTRUSTABLE — callers MUST treat
- * that as "we do not know who is asking" and apply their explicit fallback
- * policy (the login route accounts for it by IP-bucketing those requests;
+ * A missing, multi-element, or unparseable value returns IP_UNTRUSTABLE —
+ * callers MUST treat that as "we do not know who is asking" and apply their
+ * explicit fallback policy (the login route buckets those requests together;
  * see src/app/api/auth/login/route.ts).
  */
 export const IP_UNTRUSTABLE = 'ip-untrustable';
@@ -63,10 +76,12 @@ const IPV6_RE = /^[0-9a-f:]{2,45}$/i;
 export function getClientIP(req: Request): string {
   const xff = req.headers.get('x-forwarded-for');
   if (xff) {
-    // Leftmost value only; trim whitespace, reject anything that is not a
-    // plausible IP literal (defeats "1.2.3.4, garbage" style games).
-    const leftmost = xff.split(',')[0].trim();
-    if (isPlausibleIP(leftmost)) return leftmost;
+    // FIX D: our nginx OVERWRITES this header, so a conforming request has
+    // exactly ONE element. More than one element ⇒ a client-injected chain
+    // survived to the app ⇒ the leftmost value is attacker-chosen: reject.
+    if (xff.includes(',')) return IP_UNTRUSTABLE;
+    const value = xff.trim();
+    if (isPlausibleIP(value)) return value;
     return IP_UNTRUSTABLE;
   }
   return IP_UNTRUSTABLE;

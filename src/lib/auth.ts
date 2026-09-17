@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
 import { cookies, headers } from 'next/headers';
 import getDb from './db';
-import { getAuthSecret } from './auth-secret';
+import { getAuthSecret, assertUsableSessionSecret } from './auth-secret';
 
 // TASK 2 FIX A: shared hard-fail guard — in production a missing AUTH_SECRET
 // throws at module load (no insecure fallback value, here or anywhere else).
@@ -31,6 +31,10 @@ export function generateToken(user: AuthUser): string {
 }
 
 export function verifyToken(token: string): any {
+  // FIX E: even if a serve somehow loaded the dev sentinel (unset secret at
+  // module load of a differently-configured bundle), it must never verify a
+  // session with the public-in-repo value. Throw loudly instead.
+  assertUsableSessionSecret(AUTH_SECRET);
   try {
     return jwt.verify(token, AUTH_SECRET);
   } catch {

@@ -5,7 +5,7 @@
  * logins (per-IP and per-account counters, success clears both keys).
  */
 
-import { getAuthSecret, DEV_FALLBACK_SECRET } from '../auth-secret';
+import { getAuthSecret, DEV_FALLBACK_SECRET, isServingProcess, assertUsableSessionSecret } from '../auth-secret';
 
 describe('getAuthSecret (FIX A guard)', () => {
   const ORIGINAL_ENV = { ...process.env };
@@ -49,6 +49,97 @@ describe('getAuthSecret (FIX A guard)', () => {
     process.env.NODE_ENV = 'production';
     process.env.NEXT_PHASE = 'phase-production-build';
     expect(getAuthSecret()).toBe(DEV_FALLBACK_SECRET);
+  });
+
+  // FIX E: NODE_ENV alone is not trusted — a SERVING process must hard-fail
+  // without a secret even under a non-standard NODE_ENV.
+  it('FIX E: throws when started to serve with a non-standard NODE_ENV and no secret', () => {
+    delete process.env.AUTH_SECRET;
+    delete process.env.NEXT_PHASE;
+    process.env.NODE_ENV = 'test';
+    expect(() =>
+      getAuthSecret(['node', '/srv/app/node_modules/next/dist/bin/next', 'start']),
+    ).toThrow(/is not set but this process is serving/);
+  });
+
+  it('FIX E: getAuthSecret still throws for next start under NODE_ENV=production', () => {
+    delete process.env.AUTH_SECRET;
+    delete process.env.NEXT_PHASE;
+    process.env.NODE_ENV = 'production';
+    expect(() => getAuthSecret()).toThrow(/AUTH_SECRET is not set/);
+  });
+
+  it('FIX E: dev still gets the sentinel (next dev carries no start marker)', () => {
+    delete process.env.AUTH_SECRET;
+    delete process.env.NEXT_PHASE;
+    process.env.NODE_ENV = 'development';
+    expect(getAuthSecret()).toBe(DEV_FALLBACK_SECRET);
+  });
+});
+
+describe('isServingProcess (FIX E argv detection)', () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it('matches `next start` and npm/pm2-shaped serving argv', () => {
+    expect(isServingProcess(['node', '/srv/app/node_modules/next/dist/bin/next', 'start'])).toBe(true);
+    expect(isServingProcess(['/bin/sh', '-c', 'next start'])).toBe(true);
+    expect(isServingProcess(['node', '/srv/app/node_modules/.bin/next', 'start', '-p', '3000'])).toBe(true);
+  });
+
+  it('matches the render/server workers Next spawns for a serve', () => {
+    expect(isServingProcess(['node', '/srv/app/node_modules/next/dist/server/next-server.js'])).toBe(true);
+    expect(isServingProcess(['node', '/srv/app/node_modules/next/dist/server/render-worker.js'])).toBe(true);
+  });
+
+  it('does NOT match next dev, builds, or jest', () => {
+    expect(isServingProcess(['node', '/srv/app/node_modules/next/dist/bin/next', 'dev'])).toBe(false);
+    expect(isServingProcess(['node', '/srv/app/node_modules/.bin/jest', '--runInBand'])).toBe(false);
+    expect(isServingProcess(['node', '/srv/app/scripts/seed.ts'])).toBe(false);
+  });
+
+  it('a build phase (NEXT_PHASE) is never treated as a serve', () => {
+    process.env.NEXT_PHASE = 'phase-production-build';
+    expect(isServingProcess(['node', '/srv/app/node_modules/next/dist/bin/next', 'start'])).toBe(false);
+  });
+});
+
+describe('assertUsableSessionSecret (FIX E belt)', () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it('REFUSES the dev sentinel on a serving process', () => {
+    delete process.env.NEXT_PHASE;
+    expect(() =>
+      assertUsableSessionSecret(DEV_FALLBACK_SECRET, [
+        'node', '/srv/app/node_modules/next/dist/bin/next', 'start',
+      ]),
+    ).toThrow(/refusing to verify sessions/);
+  });
+
+  it('refuses the sentinel in the spawned next-server worker too', () => {
+    delete process.env.NEXT_PHASE;
+    expect(() =>
+      assertUsableSessionSecret(DEV_FALLBACK_SECRET, [
+        'node', '/srv/app/node_modules/next/dist/server/next-server.js',
+      ]),
+    ).toThrow(/refusing to verify sessions/);
+  });
+
+  it('allows a real secret everywhere, and the sentinel outside serving', () => {
+    delete process.env.NEXT_PHASE;
+    expect(() =>
+      assertUsableSessionSecret('a-real-production-secret', [
+        'node', '/srv/app/node_modules/next/dist/bin/next', 'start',
+      ]),
+    ).not.toThrow();
+    expect(() => assertUsableSessionSecret(DEV_FALLBACK_SECRET, ['node', 'jest'])).not.toThrow();
   });
 });
 

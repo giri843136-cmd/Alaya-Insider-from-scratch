@@ -64,7 +64,12 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        # SECURITY: OVERWRITE X-Forwarded-For with the address hcdn handed us.
+        # \$proxy_add_x_forwarded_for APPENDS to the client-supplied header, which
+        # preserves spoofed values from the request — see RUNBOOK.md
+        # ("Why X-Forwarded-For must be overwritten"). No security decision in
+        # the app (per-IP login lockout) may ever consume an appended chain.
+        proxy_set_header X-Forwarded-For \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_cache_bypass \$http_upgrade;
 

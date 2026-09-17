@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { getAuthSecret } from '@/lib/auth-secret';
+import { getAuthSecret, assertUsableSessionSecret } from '@/lib/auth-secret';
 
 /**
  * Server-side gate for the admin panel.
@@ -32,6 +32,9 @@ import { getAuthSecret } from '@/lib/auth-secret';
 const AUTH_SECRET = getAuthSecret();
 
 function hasValidSession(req: NextRequest): boolean {
+  // FIX E belt: a serving process must never verify sessions against the
+  // public dev sentinel, even if one was somehow loaded at boot.
+  assertUsableSessionSecret(AUTH_SECRET);
   const token = req.cookies.get('auth_token')?.value;
   if (!token) return false;
   try {
