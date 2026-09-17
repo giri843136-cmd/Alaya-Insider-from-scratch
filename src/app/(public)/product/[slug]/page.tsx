@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
-import ProductCard, { StarRating } from '@/components/public/ProductCard';
+import ProductCard from '@/components/public/ProductCard';
 import NewsletterBox from '@/components/public/NewsletterBox';
 import ProductCTA from './ProductCTA';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
@@ -114,7 +114,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <div>
           {product.brand_name && <p className="text-xs font-medium text-warm uppercase tracking-wider mb-2">{product.brand_name}</p>}
           <h1 className="text-2xl sm:text-3xl font-semibold text-accent mb-3">{product.name}</h1>
-          <div className="mb-4"><StarRating rating={product.rating} count={product.review_count} /></div>
           <div className="flex items-baseline gap-3 mb-2">
             {product.live_price != null && product.live_price > 0 ? (
               <span className="text-2xl font-semibold text-accent">{formatLiveAmount(product.live_price, product.live_currency)}</span>

@@ -4,6 +4,7 @@ import getDb from '@/lib/db';
 import { v4 as uuid } from 'uuid';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 import { resolveVisitorStore } from '@/lib/geo';
+import { publicProducts } from '@/lib/public-product';
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -16,8 +17,10 @@ export async function GET(req: NextRequest) {
   const s = `%${q}%`;
 
   const rawProducts = db.prepare(`
-    SELECT p.id, p.name, p.slug, p.current_price, p.primary_image, p.rating,
-           p.global_affiliate_url, p.india_affiliate_url, p.affiliate_url, p.sku,
+    SELECT p.id, p.name, p.slug, p.primary_image, p.image_alt, p.short_description,
+           p.seo_title, p.seo_description, p.cta_text, p.published_at, p.is_featured,
+           p.is_trending, p.is_editors_pick,
+           p.global_affiliate_url, p.india_affiliate_url, p.us_affiliate_url, p.affiliate_url,
            b.name as brand_name
     FROM products p
     LEFT JOIN brands b ON p.brand_id = b.id
@@ -28,7 +31,9 @@ export async function GET(req: NextRequest) {
 
   // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
   const geo = resolveVisitorStore(req.headers);
-  const products = await enrichProductsWithLivePrice(rawProducts as any[], geo.store);
+  const enriched = await enrichProductsWithLivePrice(rawProducts as any[], geo.store);
+  // Public allow-list: search responses expose the same shape as /api/products.
+  const products = publicProducts(enriched);
 
   const articles = db.prepare(`
     SELECT id, title, slug, excerpt, featured_image

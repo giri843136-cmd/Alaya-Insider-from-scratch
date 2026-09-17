@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
-import { StarRating } from '@/components/public/ProductCard';
+import { StarRating } from '@/components/public/StarRating';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 import { formatLiveAmount } from '@/lib/price-format';
@@ -59,8 +59,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                 <p className="text-xs text-gray-400 uppercase mb-1">{p.brand_name}</p>
                 <h3 className="font-semibold text-accent mb-2">{p.name}</h3>
                 <p className="text-lg font-semibold mb-2">{priceText(p)}</p>
-                <StarRating rating={p.rating} count={p.review_count} />
-                {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
+                <StarRating rating={p.rating} count={p.review_count} />                {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
                 {p.pros[0] && <p className="text-sm text-green-700 mt-2">+ {p.pros[0]}</p>}
                 {p.cons[0] && <p className="text-sm text-red-700 mt-1">− {p.cons[0]}</p>}
                 <a href={ctaUrl(p)} target="_blank" rel="noopener noreferrer nofollow sponsored"

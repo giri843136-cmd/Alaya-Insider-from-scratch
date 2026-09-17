@@ -2,8 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
+import { publicProduct } from '@/lib/public-product';
 import { v4 as uuid } from 'uuid';
 
+/**
+ * GET /api/products/[id] — dual shape.
+ *  - Session holder: full product row + related products (admin editor needs
+ *    every field to edit; this is exactly what it consumed before).
+ *  - Unauthenticated: public allow-list projection only (see public-product.ts)
+ *    plus id/slug/status/is_featured/is_trending/is_editors_pick/brand_slug/
+ *    category_slug/subcategory_slug for navigation and card badges, and a
+ *    related-products strip. Never prices, rating, review_count, live_*,
+ *    specifications, sku, counters, tracking ids or affiliate_network.
+ */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   ensureDbReady();
   const { id } = await params;
@@ -22,6 +33,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
 
+  const user = await getAuthUser();
+
   const related = db.prepare(`
     SELECT p.id, p.name, p.slug, p.current_price, p.previous_price, p.rating, p.review_count,
            p.primary_image, p.image_alt, p.short_description, b.name as brand_name, b.slug as brand_slug
@@ -29,18 +42,48 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     WHERE p.category_id = ? AND p.id != ? AND p.status = 'published' AND p.deleted_at IS NULL LIMIT 4
   `).all(product.category_id, product.id);
 
+  const parseProduct = (p: any) => ({
+    ...p,
+    benefits: JSON.parse(p.benefits || '[]'),
+    pros: JSON.parse(p.pros || '[]'),
+    cons: JSON.parse(p.cons || '[]'),
+    gallery_images: JSON.parse(p.gallery_images || '[]'),
+    tags: JSON.parse(p.tags || '[]'),
+    specifications: JSON.parse(p.specifications || '{}'),
+    additional_retailers: JSON.parse(p.additional_retailers || '[]'),
+  });
+
+  const parsed = parseProduct(product);
+  const parsedRelated = related.map(parseProduct);
+
+  if (user) {
+    // Authenticated: full row + related, as the admin editor expects.
+    const res = NextResponse.json({ product: parsed, related: parsedRelated });
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.headers.set('Pragma', 'no-cache');
+    return res;
+  }
+
+  // Unauthenticated: allow-list only. Drafts must not be served publicly even
+  // if the caller knows the slug, so non-published rows 404 here.
+  if (product.status !== 'published') {
+    return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+  }
+
+  const relatedPublic = parsedRelated.map((r) => publicProduct(r, ['id', 'is_featured', 'is_trending', 'is_editors_pick']));
+
   return NextResponse.json({
-    product: {
-      ...product,
-      benefits: JSON.parse(product.benefits || '[]'),
-      pros: JSON.parse(product.pros || '[]'),
-      cons: JSON.parse(product.cons || '[]'),
-      gallery_images: JSON.parse(product.gallery_images || '[]'),
-      tags: JSON.parse(product.tags || '[]'),
-      specifications: JSON.parse(product.specifications || '{}'),
-      additional_retailers: JSON.parse(product.additional_retailers || '[]'),
-    },
-    related,
+    product: publicProduct(parsed, [
+      'id',
+      'status',
+      'is_featured',
+      'is_trending',
+      'is_editors_pick',
+      'brand_slug',
+      'category_slug',
+      'subcategory_slug',
+    ]),
+    related: relatedPublic,
   });
 }
 

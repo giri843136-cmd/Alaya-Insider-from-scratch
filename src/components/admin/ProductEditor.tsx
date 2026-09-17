@@ -40,7 +40,7 @@ export default function ProductEditor({ productId }: Props) {
     adminFetch('/api/brands').then(r => r.json()).then(d => setBrands(d.brands || []));
 
     if (productId) {
-      adminFetch(`/api/products/${productId}`)
+      adminFetch(`/api/admin/products/${productId}`)
         .then(r => r.json())
         .then(d => {
           if (d.product) {
@@ -89,7 +89,7 @@ export default function ProductEditor({ productId }: Props) {
     const body = { ...form, slug, status, previous_price: form.previous_price || null };
 
     try {
-      const url = productId ? `/api/products/${productId}` : '/api/products';
+      const url = productId ? `/api/admin/products/${productId}` : '/api/admin/products';
       const method = productId ? 'PUT' : 'POST';
       const res = await adminFetch(url, { method, body: JSON.stringify(body) });
       const data = await res.json();
@@ -374,7 +374,7 @@ export default function ProductEditor({ productId }: Props) {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Price</label>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Current Price <span className="text-xs text-gray-400">(internal only — never rendered publicly)</span></label>
                 <input type="number" step="0.01" value={form.current_price}
                   onChange={e => setForm(f => ({ ...f, current_price: parseFloat(e.target.value) || 0 }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm" />

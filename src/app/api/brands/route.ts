@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
+import { publicProduct } from '@/lib/public-product';
 import { v4 as uuid } from 'uuid';
 import slugify from 'slugify';
+
+// Public allow-list for brand rows (same policy as products: seo fields only,
+// no internal ids or audit columns).
+const BRAND_PUBLIC_FIELDS = [
+  'name', 'slug', 'description', 'logo', 'website_url', 'is_featured',
+  'seo_title', 'seo_description', 'product_count',
+];
 
 export async function GET() {
   ensureDbReady();
@@ -14,7 +22,7 @@ export async function GET() {
     FROM brands b
     ORDER BY b.name ASC
   `).all();
-  return NextResponse.json({ brands });
+  return NextResponse.json({ brands: brands.map((b: any) => publicProduct(b, BRAND_PUBLIC_FIELDS)) });
 }
 
 export async function POST(req: NextRequest) {

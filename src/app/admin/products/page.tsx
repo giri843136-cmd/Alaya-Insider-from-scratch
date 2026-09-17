@@ -16,12 +16,12 @@ export default function AdminProducts() {
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ admin: 'true', page: String(page), limit: '20' });
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
     if (search) params.set('search', search);
     if (status) params.set('status', status);
 
     try {
-      const res = await adminFetch(`/api/products?${params}`);
+      const res = await adminFetch(`/api/admin/products?${params}`);
       const text = await res.text();
       let data: any;
       try {
@@ -167,7 +167,7 @@ export default function AdminProducts() {
                     </td>
                     <td className="p-3 text-gray-500 hidden sm:table-cell">{p.brand_name || '—'}</td>
                     <td className="p-3 text-gray-500 hidden md:table-cell">{p.category_name || '—'}</td>
-                    <td className="p-3 text-gray-700">${p.current_price?.toFixed(2)}</td>
+                    <td className="p-3 text-gray-700">{p.current_price != null ? `$${p.current_price.toFixed(2)}` : '—'}</td>
                     <td className="p-3 hidden lg:table-cell">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         p.status === 'published' ? 'bg-green-50 text-green-700' :

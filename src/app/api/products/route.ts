@@ -2,26 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
+import { publicProducts } from '@/lib/public-product';
 import { v4 as uuid } from 'uuid';
 import slugify from 'slugify';
-import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
-import { resolveVisitorStore } from '@/lib/geo';
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
   const db = getDb();
   const url = new URL(req.url);
-  const isAdmin = url.searchParams.get('admin') === 'true';
-
-  // Build response with no-cache headers for admin queries to prevent reverse proxy caching
-  const jsonResponse = (data: any, status = 200) => {
-    const res = NextResponse.json(data, { status });
-    if (isAdmin) {
-      res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.headers.set('Pragma', 'no-cache');
-    }
-    return res;
-  };
 
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
   const limit = Math.min(100, parseInt(url.searchParams.get('limit') || '20'));
@@ -29,7 +17,6 @@ export async function GET(req: NextRequest) {
   const search = url.searchParams.get('search') || '';
   const category = url.searchParams.get('category') || '';
   const brand = url.searchParams.get('brand') || '';
-  const status = url.searchParams.get('status') || '';
   const sort = url.searchParams.get('sort') || 'newest';
   const featured = url.searchParams.get('featured');
   const trending = url.searchParams.get('trending');
@@ -38,15 +25,12 @@ export async function GET(req: NextRequest) {
   const maxPrice = url.searchParams.get('max_price');
   const minRating = url.searchParams.get('min_rating');
 
-  let where = ['p.deleted_at IS NULL'];
+  let where = ["p.status = 'published'", 'p.deleted_at IS NULL'];
   const params: any[] = [];
 
-  if (!isAdmin) {
-    where.push("p.status = 'published'");
-  } else if (status) {
-    where.push('p.status = ?');
-    params.push(status);
-  }
+  // This endpoint is public read-only: always published rows, never drafts or
+  // soft-deleted ones. There is no ?status= or ?admin=true escape hatch — the
+  // admin UI reads full rows from the authenticated /api/admin/products.
 
   if (search) {
     where.push('(p.name LIKE ? OR p.short_description LIKE ? OR b.name LIKE ? OR p.tags LIKE ?)');
@@ -111,10 +95,6 @@ export async function GET(req: NextRequest) {
     ${whereClause}
   `).get(...params) as any;
 
-  if (isAdmin) {
-    console.log(`[PRODUCTS] Admin query: total=${countResult.total}, page=${page}, limit=${limit}`);
-  }
-
   const products = db.prepare(`
     SELECT p.*, b.name as brand_name, b.slug as brand_slug,
            c.name as category_name, c.slug as category_slug,
@@ -128,8 +108,6 @@ export async function GET(req: NextRequest) {
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
 
-  // Parse JSON fields first, then enrich with live Amazon.in prices in one
-  // batched API round-trip (cached 1 hour; graceful fallback when unavailable).
   const parsed = products.map((p: any) => ({
     ...p,
     benefits: JSON.parse(p.benefits || '[]'),
@@ -140,12 +118,12 @@ export async function GET(req: NextRequest) {
     specifications: JSON.parse(p.specifications || '{}'),
     additional_retailers: JSON.parse(p.additional_retailers || '[]'),
   }));
-  // Geo-aware enrichment: India → .in/₹, US → .com/$ (fallback .in), others → .in + OneLink.
-  const geo = resolveVisitorStore(req.headers);
-  const enrichedProducts = await enrichProductsWithLivePrice(parsed, geo.store);
 
-  return jsonResponse({
-    products: enrichedProducts,
+  // Public allow-list: strip everything not on the allow-list (prices, rating,
+  // live_*, counters, tracking ids, affiliate_network, …) before responding.
+  // Full rows are only available from the authenticated /api/admin/products.
+  return NextResponse.json({
+    products: publicProducts(parsed),
     pagination: {
       page,
       limit,

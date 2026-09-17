@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
+import { publicProduct } from '@/lib/public-product';
 import { v4 as uuid } from 'uuid';
 import slugify from 'slugify';
+
+// Public allow-list for category rows. parent_id and sort_order are the
+// structural minimum the tree builder and nav ordering need.
+const CATEGORY_PUBLIC_FIELDS = [
+  'id', 'name', 'slug', 'description', 'image', 'parent_id', 'sort_order',
+  'is_featured', 'seo_title', 'seo_description', 'product_count', 'parent_name',
+];
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -29,15 +37,17 @@ export async function GET(req: NextRequest) {
     ORDER BY c.sort_order ASC, c.name ASC
   `).all(...params);
 
+  const projected = categories.map((c: any) => publicProduct(c, CATEGORY_PUBLIC_FIELDS));
+
   if (flat) {
-    return NextResponse.json({ categories });
+    return NextResponse.json({ categories: projected });
   }
 
   // Build tree
   const tree: any[] = [];
   const map = new Map();
-  categories.forEach((c: any) => map.set(c.id, { ...c, children: [] }));
-  categories.forEach((c: any) => {
+  projected.forEach((c: any) => map.set(c.id, { ...c, children: [] }));
+  projected.forEach((c: any) => {
     const node = map.get(c.id);
     if (c.parent_id && map.has(c.parent_id)) {
       map.get(c.parent_id).children.push(node);

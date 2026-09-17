@@ -1,9 +1,6 @@
 'use client';
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import { formatLiveAmount } from '@/lib/price-format';
-
-const priceText = (p: any) => (p.live_price != null && p.live_price > 0 ? formatLiveAmount(p.live_price, p.live_currency) : 'Check price on Amazon');
 
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -68,7 +65,7 @@ export default function Header() {
                           <Link key={p.id} href={`/product/${p.slug}`} onClick={() => setSearchOpen(false)}
                             className="flex items-center gap-3 py-2 px-2 hover:bg-gray-50 rounded-md">
                             <div className="w-9 h-9 bg-ivory rounded flex-shrink-0" />
-                            <div><p className="text-[13px] text-gray-800 line-clamp-1">{p.name}</p><p className="text-[11px] text-gray-400">{p.brand_name} · {priceText(p)}</p></div>
+                            <div><p className="text-[13px] text-gray-800 line-clamp-1">{p.name}</p><p className="text-[11px] text-gray-400">{p.brand_name} · Check price on Amazon</p></div>
                           </Link>
                         ))}
                       </div>
