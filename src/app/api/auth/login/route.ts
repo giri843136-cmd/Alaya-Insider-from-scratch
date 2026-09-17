@@ -3,6 +3,7 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
 import { rateLimit, getClientIP } from '@/lib/rate-limit';
+import { isLockedOut, recordFailure, recordSuccess, getLockStatus, MAX_FAILURES } from '@/lib/login-lockout';
 
 export async function POST(req: NextRequest) {
   ensureDbReady();
@@ -19,6 +20,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
     }
 
+    // Durable lockout (sqlite): 5 consecutive failures lock the account AND
+    // the source IP for 15 minutes. Checked before credential verification so
+    // locked identifiers never reach bcrypt.
+    const accountKey = String(email).trim().toLowerCase();
+    if (isLockedOut(accountKey, ip)) {
+      const status = getLockStatus(accountKey).locked ? getLockStatus(accountKey) : getLockStatus(ip);
+      const minutes = Math.max(1, Math.ceil(status.retryAfterSeconds / 60));
+      return NextResponse.json(
+        { error: `Too many failed attempts. Locked for ${minutes} more minute${minutes === 1 ? '' : 's'}.` },
+        { status: 429, headers: { 'Retry-After': String(status.retryAfterSeconds) } },
+      );
+    }
+
     const db = getDb();
     const user = db.prepare(`
       SELECT u.*, r.name as role_name, r.permissions as role_permissions
@@ -28,7 +42,12 @@ export async function POST(req: NextRequest) {
     `).get(email, email) as any;
 
     if (!user || !verifyPassword(password, user.password_hash)) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      recordFailure(accountKey, ip);
+      const left = MAX_FAILURES - getLockStatus(accountKey).failures;
+      return NextResponse.json(
+        { error: left > 0 ? `Invalid credentials` : 'Too many failed attempts. Account locked for 15 minutes.' },
+        { status: 401 },
+      );
     }
 
     // Check if 2FA is enabled
@@ -54,6 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     db.prepare("UPDATE users SET last_login = datetime('now') WHERE id = ?").run(user.id);
+    recordSuccess(accountKey);
 
     const authUser = {
       id: user.id,
