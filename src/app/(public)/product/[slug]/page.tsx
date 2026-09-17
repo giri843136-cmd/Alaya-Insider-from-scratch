@@ -60,10 +60,8 @@ async function getProduct(slug: string) {
       cons: safeParse(product.cons),
       tags: safeParse(product.tags),
       specifications: safeParse(product.specifications, {}),
-      live_price: enriched.live_price,
-      live_currency: enriched.live_currency,
-      live_fetched_at: enriched.live_fetched_at,
-      live_available: enriched.live_available,
+      // TASK 4: no live_* fields are passed to the page — the enricher is a
+      // no-op until an official price source is approved for display.
       live_store: enriched.live_store,
       amazon_url: enriched.amazon_url,
       amazon_in_url: enriched.amazon_in_url,
@@ -140,8 +138,23 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           )}
 
-          {/* Destination Selector */}
-          {isAvailable && <ProductCTA product={product} />}
+          {/* Destination Selector — client boundary gets an explicit allow-list:
+              the raw DB row (current_price, rating, review_count, …) must never
+              be serialized into the RSC flight payload (TASK 4). */}
+          {isAvailable && (
+            <ProductCTA product={{
+              id: product.id,
+              india_active: product.india_active,
+              global_active: product.global_active,
+              india_affiliate_url: product.india_affiliate_url,
+              us_affiliate_url: product.us_affiliate_url,
+              global_affiliate_url: product.global_affiliate_url,
+              amazon_in_url: product.amazon_in_url,
+              amazon_us_url: product.amazon_us_url,
+              amazon_url: product.amazon_url,
+              live_store: product.live_store,
+            }} />
+          )}
           <PaidLinkTag className="mt-1" />
         </div>
       </div>

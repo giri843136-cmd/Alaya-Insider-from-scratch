@@ -1,21 +1,27 @@
 /**
- * Live Amazon pricing for Alaya Insider — dual-store (amazon.in + amazon.com).
+ * Price adapter — DISABLED (TASK 4, Amazon compliance quarantine).
  *
- * Live data comes from the official **Amazon Creators API** (the successor to
- * PA-API 5.0, which Amazon retired on 2026-05-15):
+ * History: this module attached live Creators-API price data (live_price /
+ * live_currency / live_fetched_at / live_available / live_store / live_asin)
+ * to product rows and was the source of the "live pricing" claims removed in
+ * TASKs 3 and 5. No official price source is connected for display, so ALL
+ * of its consumers now use `enrichProductsWithLivePrice`, which is a NO-OP:
+ * it adds nothing but the direct tagged Amazon URLs.
  *
- *   - India: marketplace www.amazon.in, tag -21, INR, token api.amazon.co.uk
- *   - US:    marketplace www.amazon.com, tag -20, USD, token api.amazon.com
- *   - Auth:  OAuth 2.0 client-credentials (see src/lib/creators-api.ts)
- *   - Caching: per (store, ASIN) SQLite cache, refreshed hourly (Amazon requires
- *     prices to refresh at least every hour OR be shown with an "as of" stamp —
- *     we do both: 1-hour TTL + an as-of label on product pages).
+ * Kept deliberately — NOT deleted: the Creators API plumbing below (official
+ * HTTPS API client via src/lib/creators-api.ts + the sqlite (store, asin)
+ * cache) becomes load-bearing the moment the Associates account reaches the
+ * 10-sales/30-days threshold, prices may be displayed again from the official
+ * API, and the enricher is re-enabled via PRICE_ENRICHMENT_ENABLED=1.
+ * getLivePrices/getLivePrice still feed two legitimate admin/ops surfaces:
+ * POST /api/cron/amazon-prices (hourly cache warm, secret gated) and
+ * POST /api/creators/cache (admin connection test / cache refresh). Neither
+ * is reachable by anonymous visitors.
  *
- * Every lookup degrades gracefully: when credentials are missing, the API is
- * unreachable, or the ASIN is invalid, callers get a LivePrice with price:null
- * and the UI falls back to "Check price on Amazon". A US lookup that fails
- * falls back to the India price/link rather than surfacing an error. This
- * module never throws for a normal price lookup.
+ * Transport (unchanged, verified): Node fetch over HTTPS to the OFFICIAL
+ * Amazon Creators API (https://creatorsapi.amazon/catalog/v1/getItems,
+ * OAuth2 client-credentials against https://api.amazon.{co.uk,com}/...).
+ * This codebase never fetches, crawls or parses amazon.com / amazon.in HTML.
  */
 
 import getDb from './db';
@@ -214,7 +220,7 @@ export function productUsUrl(product: any): string {
   return storeAffiliateUrl(product, 'us');
 }
 
-// ─── Public lookups ─────────────────────────────────────────────────────────
+// ─── Public lookups (admin/ops surfaces only — see module docblock) ───────
 
 /**
  * Live price for a single ASIN in one store.
@@ -312,32 +318,59 @@ function applyResult(store: Store, asin: string, result: { items: any[]; errors:
   return { ...emptyFor(store) };
 }
 
-// ─── Convenience for pages ──────────────────────────────────────────────────
+// ─── Page-facing enricher — DISABLED (TASK 4) ───────────────────────────────
 
 /**
- * Attach live display fields to an array of product rows in one batched API
- * round-trip per store. For the US (international) store, products WITHOUT a
- * US ASIN fall back to their India price/link (they only exist on .in);
- * products WITH a US ASIN whose US price is unavailable (store unconfigured,
- * lookup failed, out of stock) get a fallback price box anchored at the .com
- * listing (-20) so OneLink can localize it — never a ₹/.in hybrid for a
- * non-India visitor, and never an error.
+ * Set to '1' ONLY when the Associates account meets Amazon's display
+ * requirements (10 qualifying sales in 30 days) AND an official Creators
+ * API source is approved for display — i.e. when price rendering is being
+ * intentionally re-enabled (TASK 3/5 removals must be revisited in the same
+ * change). Unset (the default) keeps the enricher as a no-op.
+ */
+export const PRICE_ENRICHMENT_ENABLED = process.env.PRICE_ENRICHMENT_ENABLED === '1';
+
+/**
+ * Attach display fields to product rows.
  *
- * Each product row gains:
- *   live_price / live_currency / live_fetched_at / live_available
- *   live_store        — which store the displayed price came from ('in'|'us')
- *   live_asin         — the ASIN the price came from
- *   amazon_url        — direct anchor for the display store (OneLink-friendly)
- *   amazon_in_url / amazon_us_url — direct anchors for both stores
+ * TASK 4: deliberate NO-OP for price/rating data — no network calls, no
+ * writes to the cache or the products table. Rows are returned unchanged
+ * except for the direct tagged Amazon URLs (amazon_url for the visitor's
+ * store + amazon_in_url / amazon_us_url), computed purely from stored
+ * affiliate URLs/ASINs — the only enriched fields any page still renders
+ * (the CTAs). With PRICE_ENRICHMENT_ENABLED=1 the previous live enrichment
+ * is restored; re-enable only together with an official-source display.
  */
 export async function enrichProductsWithLivePrice(products: any[], store: Store = DEFAULT_STORE): Promise<any[]> {
   if (!products || products.length === 0) return products || [];
 
+  if (!PRICE_ENRICHMENT_ENABLED) {
+    // Requested store first; when the product has no listing there, fall back
+    // to the other store's direct URL (matches the historical URL contract so
+    // CTAs never render an empty href).
+    const amazonUrl = (p: any) => {
+      const preferred = store === 'us' ? productUsUrl(p) : productIndiaUrl(p);
+      return preferred || (store === 'us' ? productIndiaUrl(p) : productUsUrl(p));
+    };
+    return products.map((p: any) => ({
+      ...p,
+      // Explicit no-data shape (TASK 4): consumers must never see a stale or
+      // undefined live_* value while no price source is approved for display.
+      live_price: null,
+      live_currency: null,
+      live_available: false,
+      live_fetched_at: null,
+      live_store: store,
+      amazon_url: amazonUrl(p),
+      amazon_in_url: productIndiaUrl(p),
+      amazon_us_url: productUsUrl(p),
+    }));
+  }
+
+  // Re-enablement path (PRICE_ENRICHMENT_ENABLED=1): the historical live
+  // enrichment. Not reachable until the flag is deliberately set.
   const usAsins = [...new Set(products.map(productUsAsin).filter(Boolean) as string[])];
   const inAsins = [...new Set(products.map(productIndiaAsin).filter(Boolean) as string[])];
 
-  // Fetch the primary store first; for US visitors also fetch India prices so
-  // products without a US listing still show a ₹ fallback instead of nothing.
   const [primary, india] = store === 'us'
     ? [getLivePrices(usAsins, 'us'), getLivePrices(inAsins, 'in')]
     : [getLivePrices(inAsins, 'in'), Promise.resolve(new Map<string, LivePrice>())];
@@ -351,11 +384,6 @@ export async function enrichProductsWithLivePrice(products: any[], store: Store 
     if (store === 'us' && usAsin) {
       const usLive = liveMap.get(usAsin);
       const hasUsPrice = usLive?.price != null && usLive.price > 0;
-      // Real US price → USD + .com anchor. Otherwise the product HAS a US
-      // listing but its price is unavailable (store unconfigured / lookup
-      // failed / out of stock): serve a fallback price box whose anchor stays
-      // on the .com listing with -20 so OneLink can localize it for
-      // non-India visitors — the .in price is NOT shown against a .com link.
       if (hasUsPrice) {
         return { ...p, ...liveDisplayFields(usLive, 'us'), live_store: 'us', live_asin: usAsin,
           amazon_url: productUsUrl(p), amazon_in_url: productIndiaUrl(p), amazon_us_url: productUsUrl(p) };
@@ -364,9 +392,6 @@ export async function enrichProductsWithLivePrice(products: any[], store: Store 
         amazon_url: productUsUrl(p), amazon_in_url: productIndiaUrl(p), amazon_us_url: productUsUrl(p) };
     }
 
-    // store === 'us' but the product has no US ASIN — serve the India price
-    // (fetched in the same batch) so international visitors still see a live
-    // box on the only marketplace where the product exists.
     const inLive = inAsin ? indiaMap.get(inAsin) ?? liveMap.get(inAsin) : null;
     return { ...p, ...liveDisplayFields(inLive, 'in'), live_store: 'in', live_asin: inAsin,
       amazon_url: productIndiaUrl(p), amazon_in_url: productIndiaUrl(p), amazon_us_url: productUsUrl(p) };

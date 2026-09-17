@@ -77,8 +77,11 @@ function insertProduct(row: ImportRow, userId: string): RowOutcome {
   // Column/value pairs — literal-safe, no hand-counted placeholder lists.
   const cols: [string, unknown][] = [
     ['id', id], ['name', row.name], ['slug', slug], ['brand_id', brandId], ['category_id', categoryId],
-    ['sku', ''], ['current_price', row.current_price ?? 0], ['previous_price', null],
-    ['currency', row.currency], ['rating', row.rating ?? 0], ['review_count', row.review_count ?? 0],
+    ['sku', ''],
+    // TASK 4: commercial fields default to NULL (never fabricated 0/priceless
+    // defaults) — the columns are only populated when the CSV supplies a value.
+    ['current_price', row.current_price], ['previous_price', null],
+    ['currency', row.currency], ['rating', row.rating], ['review_count', row.review_count],
     ['primary_image', row.primary_image || ''], ['gallery_images', '[]'], ['thumbnail', ''],
     ['image_alt', row.name], ['short_description', row.short_description || ''],
     ['full_description', ''], ['why_we_recommend', row.why_we_recommend || ''], ['best_for', row.best_for || ''],

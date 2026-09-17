@@ -13,7 +13,7 @@ TASK-QUEUE STATE (updated 2026-09-17)
     before relying on /compare/*). The /compare/[slug] server-component
     500 (inline onClick beacons) is fixed by FIX I (TASK 2 follow-ups,
     2026-09-17) — invisible in prod only because the table is empty.
-[ ] TASK 4 — quarantine fabricated price/rating fields (+ scripts/NULL-commercial-fields.ts)
+[x] TASK 4 — quarantine fabricated price/rating fields (+ scripts/NULL-commercial-fields.ts)
 [ ] TASK 5 — price-claim wording + OneLink sentence removal
 ```
 
@@ -45,3 +45,14 @@ TASK-QUEUE STATE (updated 2026-09-17)
 - Homepage/category/collection/brand public pages still call
   `enrichProductsWithLivePrice` server-side and render live price boxes; they
   are page rendering, not the public JSON API — touch in TASK 3/4/5 as needed.
+- TASK 4 (done): `enrichProductsWithLivePrice` is a display NO-OP
+  (explicit null live_* shape + tagged direct URLs only; zero network on page
+  renders). Re-enable path: `PRICE_ENRICHMENT_ENABLED=1` — only together with
+  an approved official-source display. Creators plumbing kept for the
+  10-sales/30-days threshold (admin/ops callers: `/api/cron/amazon-prices`,
+  `/api/creators/cache`). seed-demo + CSV import now default the commercial
+  columns to NULL (schema untouched). Product page passes an allow-listed
+  object to the ProductCTA client boundary — the raw DB row was being
+  serialized into the RSC flight payload (real leak, found by live verify).
+  `scripts/NULL-commercial-fields.ts` (staging-only, --apply/--restore) is
+  ready for the user to run on a staging copy.

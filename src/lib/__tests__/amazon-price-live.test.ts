@@ -218,21 +218,26 @@ describe('getLivePrices — batching and enrichment', () => {
     expect(first.price).toBe(1299.5);
   });
 
-  it('enrichProductsWithLivePrice attaches live_price/live_currency/live_fetched_at to every row', async () => {
+  it('enrichProductsWithLivePrice is a display no-op: explicit null live_* shape + tagged direct URLs, zero network (TASK 4)', async () => {
     installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } } });
     const products = [
       { id: '1', name: 'A', india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH' },
-      { id: '2', name: 'B', india_affiliate_url: '' }, // no India ASIN → fallback fields
+      { id: '2', name: 'B', india_affiliate_url: '' }, // no India ASIN → .in URL empty
     ];
     const enriched = await mod.enrichProductsWithLivePrice(products);
-    expect(enriched[0].live_price).toBe(1299.5);
-    expect(enriched[0].live_currency).toBe('INR');
-    expect(enriched[0].live_available).toBe(true);
-    expect(enriched[0].live_store).toBe('in');
-    expect(enriched[0].amazon_url).toContain('www.amazon.in');
-    expect(enriched[0].amazon_url).toContain('tag=');
+    // No price/rating data may be attached while no official source is approved for display:
+    expect(enriched[0].live_price).toBeNull();
+    expect(enriched[0].live_currency).toBeNull();
+    expect(enriched[0].live_available).toBe(false);
+    expect(enriched[0].live_fetched_at).toBeNull();
     expect(enriched[1].live_price).toBeNull();
     expect(enriched[1].live_available).toBe(false);
+    // Direct tagged URLs are still resolved (pure local URL building):
+    expect(enriched[0].amazon_url).toContain('www.amazon.in');
+    expect(enriched[0].amazon_url).toContain('tag=');
+    expect(enriched[0].amazon_in_url).toContain('www.amazon.in');
+    // Enrichment must NOT talk to Amazon on a page render:
+    expect(fetchMock.mock.calls.length).toBe(0);
   });
 
   it('same ASIN in two stores does not collide in the cache (per-store isolation)', async () => {
@@ -256,21 +261,21 @@ describe('getLivePrices — batching and enrichment', () => {
     expect(inLive.currency).toBe('INR');
   });
 
-  it('US store enrichment with a US ASIN returns USD and amazon.com links', async () => {
-    installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: [
-      sampleItem('B0USASIN01', { offersV2: { listings: [{ price: { money: { amount: 49.99, currency: 'USD', displayAmount: '$49.99' } }, availability: { type: 'IN_STOCK' }, condition: { value: 'New' }, isBuyBoxWinner: true, merchantInfo: { name: 'Amazon.com' } }] } }),
-    ] } } });
+  it('US store enrichment resolves the .com URL and carries an explicit null price (no display source)', async () => {
+    installFetch({ tokenBody: goodToken, getItemsBody: { itemResults: { items: [sampleItem('B0USASIN01')] } } });
     const products = [{ id: '1', name: 'A', india_affiliate_url: 'https://www.amazon.in/dp/B0ABCDEFGH', us_affiliate_url: 'https://www.amazon.com/dp/B0USASIN01?tag=alayainsider-20' }];
     const enriched = await mod.enrichProductsWithLivePrice(products, 'us');
-    expect(enriched[0].live_price).toBe(49.99);
-    expect(enriched[0].live_currency).toBe('USD');
+    expect(enriched[0].live_price).toBeNull();
+    expect(enriched[0].live_available).toBe(false);
     expect(enriched[0].live_store).toBe('us');
     expect(enriched[0].amazon_url).toContain('www.amazon.com');
     expect(enriched[0].amazon_url).toContain('tag=');
+    expect(fetchMock.mock.calls.length).toBe(0);
   });
 
-  it('product exists only on .in (no US listing) → India price + .in link, never an error', async () => {
-    // US GetItems returns nothing for the product (no US ASIN on the product).
+  it('product exists only on .in (no US listing) → US-store request falls back to the .in URL, no error', async () => {
+    // No US ASIN on the product → the .com URL is empty; the CTA must still
+    // get a usable (India) href instead of a dead anchor.
     installFetch({
       tokenBody: goodToken,
       getItemsBody: { itemResults: { items: [sampleItem('B0ABCDEFGH')] } },
@@ -281,11 +286,11 @@ describe('getLivePrices — batching and enrichment', () => {
       us_affiliate_url: '', // product has NO US ASIN
     }];
     const enriched = await mod.enrichProductsWithLivePrice(products, 'us');
-    expect(enriched[0].live_price).toBe(1299.5);
-    expect(enriched[0].live_currency).toBe('INR');
-    expect(enriched[0].live_store).toBe('in');
+    expect(enriched[0].live_price).toBeNull();
+    expect(enriched[0].live_available).toBe(false);
     expect(enriched[0].amazon_url).toContain('www.amazon.in');
     expect(enriched[0].amazon_url).not.toContain('amazon.com');
+    expect(fetchMock.mock.calls.length).toBe(0);
   });
 
   it('product HAS a US ASIN but its US lookup fails → fallback box stays on .com (-20), no ₹/.in hybrid', async () => {
