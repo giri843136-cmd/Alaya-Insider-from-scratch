@@ -345,20 +345,44 @@ console.log('expired rows deleted:', out.changes);
 "
 ```
 
-**Why `X-Forwarded-For` must be OVERWRITTEN, never appended (FIX D).**
-`$proxy_add_x_forwarded_for` APPENDS the proxy's view of its peer to whatever
-the client already sent — including a header the attacker invented. A request
-sent with `X-Forwarded-For: 8.8.8.8` would reach the app as
-`8.8.8.8, <hcdn-ip>, <nginx-ip>`; any code reading the leftmost (or any)
-element of that chain reads an attacker-chosen value, so the per-IP login
-lockout could be bypassed with a single header.
-`scripts/setup-nginx.sh` therefore sets
-`proxy_set_header X-Forwarded-For $remote_addr;` (overwrite). The app then
-rejects ANY multi-element XFF header as spoofed (`IP_UNTRUSTABLE`) and
-buckets those requests together — so even a mis-configured nginx cannot
-resurrect the bypass. Never reintroduce `$proxy_add_x_forwarded_for` in
-front of this app, and never use any `X-Forwarded-*` value for an
-authorization decision.
+**`X-Forwarded-For` and the per-IP lockout — ONE switch (FIX D + FIX G).**
+The per-IP login lockout is only as real as the edge's XFF handling, so the
+nginx config and its verification are one unit, not two independent
+settings.
+
+1. **nginx config (the switch):** `scripts/setup-nginx.sh` sets
+   `proxy_set_header X-Forwarded-For $remote_addr;` — OVERWRITE, never
+   `$proxy_add_x_forwarded_for` (appending preserves the attacker's header:
+   `X-Forwarded-For: 8.8.8.8` would arrive as `8.8.8.8, <hcdn-ip>,
+   <nginx-ip>` and any code reading that chain reads attacker input). The
+   app additionally rejects ANY multi-element XFF header as spoofed
+   (`IP_UNTRUSTABLE`), and the shared untrustable bucket **records but never
+   locks** — the account lock is authoritative — so no XFF failure mode can
+   lock legitimate logins out (self-DoS) or bypass the account lock. Never
+   reintroduce `$proxy_add_x_forwarded_for` in front of this app, and never
+   use any `X-Forwarded-*` value for an authorization decision.
+2. **Single verification command (run after any edge/nginx change).**
+   Enable the debug echo once on the VPS (`echo 'DEBUG_IP=1' >> .env && pm2
+   restart alayainsider --update-env`), run BOTH curls, then remove
+   `DEBUG_IP` and restart again:
+
+   ```bash
+   curl -s -H 'X-Forwarded-For: 8.8.8.8' https://alayainsider.com/api/debug/peer-ip; echo
+   curl -s https://alayainsider.com/api/debug/peer-ip; echo
+   ```
+
+   Read the `resolved` / `headers.x-forwarded-for` / `verdict` fields:
+   - Spoofed call shows `"resolved":"ip-untrustable"` with a MULTI-element
+     x-forwarded-for → the edge APPENDS/passes client XFF through: FIX the
+     nginx overwrite before trusting per-IP lockout keys.
+   - Spoofed call shows a single x-forwarded-for element equal to the same
+     address the no-XFF call resolves → the edge OVERWRITES XFF: per-IP
+     lockout is safe to trust.
+   - No XFF header at all in either response → the edge strips/overwrites
+     the header away; per-IP keys fall back to `shared:untrustable-ip`
+     (record-only), which is safe but coarse.
+   - Both calls printing `{"error":"Not found"}` means DEBUG_IP is not set
+     (the route is 404 in normal operation).
 
 Related hardening in the same change: the app **refuses to start** in
 production without `AUTH_SECRET` (no fallback secret exists anymore). If the

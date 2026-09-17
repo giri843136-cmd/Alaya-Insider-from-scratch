@@ -23,6 +23,20 @@ import getDb from './db';
 export const MAX_FAILURES = 5;
 export const LOCKOUT_MS = 15 * 60 * 1000;
 
+/**
+ * FIX G — the shared bucket for requests whose client IP could not be
+ * trusted (missing/multi-element/unparseable X-Forwarded-For) NEVER locks.
+ *
+ * Why: the bucket aggregates every header-stripped request into one key, so
+ * locking it at MAX_FAILURES would let any attacker (or an edge misconfig)
+ * lock ALL such traffic — including legitimate admins — out of the login for
+ * 15 minutes: a self-DoS. The ACCOUNT lock is the authoritative control and
+ * still applies to every failed attempt regardless of IP trustability.
+ * Failures against the bucket keep being recorded (fail_count) so scanners
+ * remain visible in logs and in getLockStatus().
+ */
+export const UNTRUSTABLE_BUCKET = 'shared:untrustable-ip';
+
 let tableReady = false;
 function ensureTable() {
   if (tableReady) return;
@@ -79,7 +93,8 @@ export function isLockedOut(account: string, ip: string): boolean {
   return getLockStatus(account).locked || getLockStatus(ip).locked;
 }
 
-/** Record a failed attempt against BOTH the account and the IP. Locks at MAX_FAILURES. */
+/** Record a failed attempt against BOTH the account and the IP. Locks at MAX_FAILURES.
+ *  FIX G: the shared untrustable bucket records but never locks. */
 export function recordFailure(account: string, ip: string): void {
   const now = new Date().toISOString();
   const lockedUntil = new Date(Date.now() + LOCKOUT_MS).toISOString();
@@ -97,7 +112,9 @@ export function recordFailure(account: string, ip: string): void {
     // A lock that has already expired does not count against the new window.
     const stale = row?.locked_until ? !isActive(row.locked_until) : false;
     const count = (stale ? 0 : row?.fail_count ?? 0) + 1;
-    upsert.run(id, count, count >= MAX_FAILURES ? lockedUntil : null, now);
+    // FIX G: the untrustable bucket keeps counting but never reaches a lock.
+    const mayLock = id !== UNTRUSTABLE_BUCKET;
+    upsert.run(id, count, mayLock && count >= MAX_FAILURES ? lockedUntil : null, now);
   }
 }
 

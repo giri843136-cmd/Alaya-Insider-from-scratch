@@ -3,22 +3,20 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
 import { rateLimit, getClientIP, IP_UNTRUSTABLE } from '@/lib/rate-limit';
-import { isLockedOut, recordFailure, recordSuccess, getLockStatus, MAX_FAILURES } from '@/lib/login-lockout';
+import { isLockedOut, recordFailure, recordSuccess, getLockStatus, MAX_FAILURES, UNTRUSTABLE_BUCKET } from '@/lib/login-lockout';
 
 /**
- * FIX B (TASK 2) — explicit policy when the client IP is untrustable
- * (missing or unparseable X-Forwarded-For, i.e. the request did not come
- * through our nginx edge):
+ * FIX B + FIX G (TASK 2) — explicit policy when the client IP is untrustable
+ * (missing, multi-element or unparseable X-Forwarded-For):
  *
- *   FALL BACK TO ACCOUNT LOCK ONLY, PLUS A SHARED "UNTRUSTABLE" IP BUCKET.
+ *   FALL BACK TO THE ACCOUNT LOCK ONLY. The shared bucket RECORDS failures
+ *   (visibility in logs / getLockStatus) but NEVER locks.
  *
- * Why not refuse after N untrustable attempts outright: the account lock
- * already bounds guessing per credential, and a blanket refusal would let an
- * attacker DoS the admin login for everyone by simply stripping headers.
- * The shared bucket keeps a coarse brake (MAX_FAILURES failures from ALL
- * untrustable sources, e.g. direct-to-port scanners) without per-attacker
- * granularity we cannot have anyway. Trusted-IP requests keep the exact
- * per-IP behaviour.
+ * Why: a shared key aggregates every header-stripped request; locking it
+ * would let one attacker — or an edge misconfig — deny the login to all such
+ * traffic for 15 minutes (a self-DoS). The account lock already bounds
+ * guessing per credential and is authoritative for every attempt. Trusted-IP
+ * requests keep the full per-IP lockout behaviour.
  */
 
 export async function POST(req: NextRequest) {
@@ -38,10 +36,10 @@ export async function POST(req: NextRequest) {
 
     // Durable lockout (sqlite): 5 consecutive failures lock the account AND
     // the source IP for 15 minutes. Checked before credential verification so
-    // locked identifiers never reach bcrypt. Untrustable-IP requests share
-    // one lockout bucket (see the policy note above).
+    // locked identifiers never reach bcrypt. FIX G: the shared untrustable
+    // bucket records but never locks (account lock is authoritative).
     const accountKey = String(email).trim().toLowerCase();
-    const ipKey = ip === IP_UNTRUSTABLE ? 'shared:untrustable-ip' : ip;
+    const ipKey = ip === IP_UNTRUSTABLE ? UNTRUSTABLE_BUCKET : ip;
     if (isLockedOut(accountKey, ipKey)) {
       const status = getLockStatus(accountKey).locked ? getLockStatus(accountKey) : getLockStatus(ipKey);
       const minutes = Math.max(1, Math.ceil(status.retryAfterSeconds / 60));

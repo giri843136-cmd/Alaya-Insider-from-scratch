@@ -192,4 +192,26 @@ describe('login-lockout counters (FIX B/C semantics)', () => {
     expect(lockout.getLockStatus('shared:untrustable-ip').failures).toBe(0);
     expect(lockout.getLockStatus('203.0.113.40').failures).toBe(1);
   });
+
+  // FIX G: the shared untrustable bucket aggregates every header-stripped
+  // request; locking it would be a self-DoS. It records but NEVER locks —
+  // the ACCOUNT lock is the authoritative control.
+  it('FIX G: the shared untrustable bucket NEVER locks, no matter how many failures', () => {
+    for (let i = 0; i < 30; i++) lockout.recordFailure('acct-g', 'shared:untrustable-ip');
+    expect(lockout.getLockStatus('acct-g').locked).toBe(true); // account lock still applies
+    expect(lockout.getLockStatus('shared:untrustable-ip').locked).toBe(false); // bucket never locks
+    expect(lockout.isLockedOut('acct-OTHER', 'shared:untrustable-ip')).toBe(false); // others unaffected
+  });
+
+  it('FIX G: bucket failures keep being recorded so scanners stay visible', () => {
+    const before = lockout.getLockStatus('shared:untrustable-ip').failures;
+    lockout.recordFailure('acct-g2', 'shared:untrustable-ip');
+    expect(lockout.getLockStatus('shared:untrustable-ip').failures).toBeGreaterThan(before);
+    expect(lockout.getLockStatus('shared:untrustable-ip').locked).toBe(false);
+  });
+
+  it('FIX G: a real (trusted) IP still locks at MAX_FAILURES — unchanged', () => {
+    for (let i = 0; i < lockout.MAX_FAILURES; i++) lockout.recordFailure('acct-h', '203.0.113.99');
+    expect(lockout.getLockStatus('203.0.113.99').locked).toBe(true);
+  });
 });
