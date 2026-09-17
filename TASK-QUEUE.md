@@ -8,7 +8,7 @@ One task per session. Mark `[x]` when committed.
 TASK-QUEUE STATE (updated 2026-09-17)
 [x] TASK 1 — public API allow-list                (commit 7c7c63d)
 [x] TASK 2 — server-side auth on /admin/* + login lockout   (commit see git log)
-[ ] TASK 3 — Product JSON-LD: drop offers/aggregateRating
+[x] TASK 3 — Product JSON-LD: drop offers/aggregateRating
 [ ] TASK 4 — quarantine fabricated price/rating fields (+ scripts/NULL-commercial-fields.ts)
 [ ] TASK 5 — price-claim wording + OneLink sentence removal
 ```

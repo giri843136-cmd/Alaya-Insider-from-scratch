@@ -3,19 +3,16 @@ import { headers } from 'next/headers';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
-import { StarRating } from '@/components/public/StarRating';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
-import { formatLiveAmount } from '@/lib/price-format';
 import { resolveVisitorStore } from '@/lib/geo';
 
 // Geo-aware rendering (visitor store) requires per-request evaluation.
 export const dynamic = 'force-dynamic';
 
-// Direct Amazon anchor for the store whose price is shown (OneLink-friendly —
+// Direct Amazon anchor (OneLink-friendly —
 // never routed through /go/ so OneLink can rewrite for secondary markets).
 const ctaUrl = (p: any) => p.amazon_url || p.india_affiliate_url || '';
-const priceText = (p: any) => (p.live_price != null && p.live_price > 0 ? formatLiveAmount(p.live_price, p.live_currency) : 'Check price on Amazon');
 
 export default async function ComparisonPage({ params }: { params: Promise<{ slug: string }> }) {
   ensureDbReady();
@@ -58,8 +55,7 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
               <div key={p.id} className="border border-gray-100 rounded-lg p-5">
                 <p className="text-xs text-gray-400 uppercase mb-1">{p.brand_name}</p>
                 <h3 className="font-semibold text-accent mb-2">{p.name}</h3>
-                <p className="text-lg font-semibold mb-2">{priceText(p)}</p>
-                <StarRating rating={p.rating} count={p.review_count} />                {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
+                {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
                 {p.pros[0] && <p className="text-sm text-green-700 mt-2">+ {p.pros[0]}</p>}
                 {p.cons[0] && <p className="text-sm text-red-700 mt-1">− {p.cons[0]}</p>}
                 <a href={ctaUrl(p)} target="_blank" rel="noopener noreferrer nofollow sponsored"
@@ -87,14 +83,6 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                 <tr className="border-t border-gray-100">
                   <td className="p-4 text-gray-500">Brand</td>
                   {products.map((p: any) => <td key={p.id} className="p-4">{p.brand_name}</td>)}
-                </tr>
-                <tr className="border-t border-gray-100 bg-gray-50">
-                  <td className="p-4 text-gray-500">Price</td>
-                  {products.map((p: any) => <td key={p.id} className="p-4 font-semibold">{priceText(p)}</td>)}
-                </tr>
-                <tr className="border-t border-gray-100">
-                  <td className="p-4 text-gray-500">Rating</td>
-                  {products.map((p: any) => <td key={p.id} className="p-4">{p.rating} / 5 ({p.review_count})</td>)}
                 </tr>
                 <tr className="border-t border-gray-100 bg-gray-50">
                   <td className="p-4 text-gray-500">Best For</td>

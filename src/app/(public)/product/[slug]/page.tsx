@@ -8,7 +8,6 @@ import NewsletterBox from '@/components/public/NewsletterBox';
 import ProductCTA from './ProductCTA';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
-import { formatLiveAmount, asOfLabel } from '@/lib/price-format';
 import { resolveVisitorStore } from '@/lib/geo';
 import { buildProductSchema } from '@/lib/product-schema';
 import type { Metadata } from 'next';
@@ -114,18 +113,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <div>
           {product.brand_name && <p className="text-xs font-medium text-warm uppercase tracking-wider mb-2">{product.brand_name}</p>}
           <h1 className="text-2xl sm:text-3xl font-semibold text-accent mb-3">{product.name}</h1>
-          <div className="flex items-baseline gap-3 mb-2">
-            {product.live_price != null && product.live_price > 0 ? (
-              <span className="text-2xl font-semibold text-accent">{formatLiveAmount(product.live_price, product.live_currency)}</span>
-            ) : (
-              <span className="text-lg text-gray-400 italic">Check current price on Amazon</span>
-            )}
-          </div>
-          {product.live_price != null && product.live_price > 0 && product.live_fetched_at ? (
-            <p className="text-[11px] text-gray-400 mb-6">{asOfLabel(product.live_fetched_at, product.live_store || 'in')} · Live price from {product.live_store === 'us' ? 'Amazon.com' : 'Amazon.in'}, refreshed hourly. Price &amp; availability may change.</p>
-          ) : (
-            <p className="text-[11px] text-gray-400 mb-6">Prices shown are for reference and may vary. Click the shopping button below to see the latest price on Amazon.</p>
-          )}
 
           {!isAvailable && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
