@@ -9,6 +9,10 @@ TASK-QUEUE STATE (updated 2026-09-17)
 [x] TASK 1 — public API allow-list                (commit 7c7c63d)
 [x] TASK 2 — server-side auth on /admin/* + login lockout   (commit see git log)
 [x] TASK 3 — Product JSON-LD: drop offers/aggregateRating
+    NOTE: ZERO published comparisons exist in    prod today (verify on the VPS
+    before relying on /compare/*). The /compare/[slug] server-component
+    500 (inline onClick beacons) is fixed by FIX I (TASK 2 follow-ups,
+    2026-09-17) — invisible in prod only because the table is empty.
 [ ] TASK 4 — quarantine fabricated price/rating fields (+ scripts/NULL-commercial-fields.ts)
 [ ] TASK 5 — price-claim wording + OneLink sentence removal
 ```

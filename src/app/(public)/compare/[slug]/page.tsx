@@ -4,6 +4,7 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import Breadcrumbs from '@/components/public/Breadcrumbs';
 import PaidLinkTag from '@/components/public/PaidLinkTag';
+import CtaLink from '@/components/public/CtaLink';
 import { enrichProductsWithLivePrice } from '@/lib/amazon-price';
 import { resolveVisitorStore } from '@/lib/geo';
 
@@ -58,11 +59,11 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                 {p.best_for && <p className="text-sm text-gray-600 mt-3"><strong>Best for:</strong> {p.best_for}</p>}
                 {p.pros[0] && <p className="text-sm text-green-700 mt-2">+ {p.pros[0]}</p>}
                 {p.cons[0] && <p className="text-sm text-red-700 mt-1">− {p.cons[0]}</p>}
-                <a href={ctaUrl(p)} target="_blank" rel="noopener noreferrer nofollow sponsored"
-                  onClick={() => { try { fetch('/api/clicks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p.id, destination_type: p.live_store === 'us' ? 'global' : 'india', store: p.live_store || 'in' }) }); } catch {} }}
+                <CtaLink href={ctaUrl(p)} productId={p.id}
+                  destinationType={p.live_store === 'us' ? 'global' : 'india'} store={p.live_store || 'in'}
                   className="mt-4 inline-block px-5 py-2 bg-accent text-white text-sm rounded-md">
                   {p.cta_text || 'Check Price'}
-                </a>
+                </CtaLink>
                 <PaidLinkTag className="mt-1" />
               </div>
             ))}
@@ -100,11 +101,11 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                   <td className="p-4 text-gray-500">Action</td>
                   {products.map((p: any) => (
                     <td key={p.id} className="p-4">
-                      <a href={ctaUrl(p)} target="_blank" rel="noopener noreferrer nofollow sponsored"
-                        onClick={() => { try { fetch('/api/clicks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p.id, destination_type: p.live_store === 'us' ? 'global' : 'india', store: p.live_store || 'in' }) }); } catch {} }}
+                      <CtaLink href={ctaUrl(p)} productId={p.id}
+                        destinationType={p.live_store === 'us' ? 'global' : 'india'} store={p.live_store || 'in'}
                         className="inline-block px-4 py-2 bg-accent text-white text-xs rounded-md hover:bg-accent-light transition-colors">
                         {p.cta_text || 'Check Price'}
-                      </a>
+                      </CtaLink>
                       <PaidLinkTag className="mt-1" />
                     </td>
                   ))}
