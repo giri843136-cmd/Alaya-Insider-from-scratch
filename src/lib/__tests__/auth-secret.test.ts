@@ -101,6 +101,20 @@ describe('isServingProcess (FIX E argv detection)', () => {
     expect(isServingProcess(['node', '/srv/app/scripts/seed.ts'])).toBe(false);
   });
 
+  // FIX H: a standalone server (server.js from output: 'standalone', possibly
+  // under .next/standalone) is a serve regardless of NODE_ENV.
+  it('FIX H: matches a standalone server.js invocation', () => {
+    expect(isServingProcess(['node', '/srv/app/server.js'])).toBe(true);
+    expect(isServingProcess(['node', '/srv/app/.next/standalone/server.js'])).toBe(true);
+    expect(isServingProcess(['node', 'server.js'])).toBe(true);
+    expect(isServingProcess(['node', '/srv/app/.next/standalone/server.js', '-p', '3000'])).toBe(true);
+  });
+
+  it('FIX H: does NOT match arbitrary scripts merely named like a server', () => {
+    expect(isServingProcess(['node', '/srv/app/scripts/server-utils.js'])).toBe(false);
+    expect(isServingProcess(['node', '/srv/app/myserver.js'])).toBe(false);
+  });
+
   it('a build phase (NEXT_PHASE) is never treated as a serve', () => {
     process.env.NEXT_PHASE = 'phase-production-build';
     expect(isServingProcess(['node', '/srv/app/node_modules/next/dist/bin/next', 'start'])).toBe(false);
@@ -140,6 +154,29 @@ describe('assertUsableSessionSecret (FIX E belt)', () => {
       ]),
     ).not.toThrow();
     expect(() => assertUsableSessionSecret(DEV_FALLBACK_SECRET, ['node', 'jest'])).not.toThrow();
+  });
+
+  it('FIX H: dev sentinel on a standalone serve REFUSES unless ALLOW_DEV_SECRET=1', () => {
+    delete process.env.NEXT_PHASE;
+    delete process.env.ALLOW_DEV_SECRET;
+    expect(() =>
+      assertUsableSessionSecret(DEV_FALLBACK_SECRET, ['node', '/srv/app/.next/standalone/server.js']),
+    ).toThrow(/refusing to verify sessions/);
+
+    process.env.ALLOW_DEV_SECRET = '1';
+    expect(() =>
+      assertUsableSessionSecret(DEV_FALLBACK_SECRET, ['node', '/srv/app/.next/standalone/server.js']),
+    ).not.toThrow();
+  });
+
+  it('FIX H: getAuthSecret throws for a standalone serve without a secret, any NODE_ENV', () => {
+    delete process.env.AUTH_SECRET;
+    delete process.env.NEXT_PHASE;
+    delete process.env.ALLOW_DEV_SECRET;
+    process.env.NODE_ENV = 'production';
+    expect(() =>
+      getAuthSecret(['node', '/srv/app/.next/standalone/server.js']),
+    ).toThrow(/is not set but this process is serving/);
   });
 });
 

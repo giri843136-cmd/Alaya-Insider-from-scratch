@@ -43,6 +43,10 @@ export function isServingProcess(argv: string[] = process.argv): boolean {
   // announces itself via NEXT_PHASE. Keep builds working secret-less.
   if (process.env.NEXT_PHASE === 'phase-production-build') return false;
   const joined = argv.join(' ');
+  // FIX H: a standalone server (output: 'standalone') — node server.js,
+  // including under .next/standalone. Anchored so scripts/server-utils.js
+  // or myserver.js do NOT match.
+  if (/(^|[\\/\s])server\.js(\s|$)/.test(joined)) return true;
   // Render/server worker processes Next spawns for a serve.
   if (/next-server\.(js|cjs|mjs)(\s|$)/.test(joined)) return true;
   if (/render-worker\.(js|cjs|mjs)(\s|$)/.test(joined)) return true;
@@ -62,7 +66,8 @@ export function isServingProcess(argv: string[] = process.argv): boolean {
  * every verify path (src/lib/auth.ts verifyToken, src/middleware.ts).
  */
 export function assertUsableSessionSecret(secret: string, argv: string[] = process.argv): void {
-  if (secret === DEV_FALLBACK_SECRET && isServingProcess(argv)) {
+  const devAllowed = process.env.ALLOW_DEV_SECRET === '1';
+  if (secret === DEV_FALLBACK_SECRET && isServingProcess(argv) && !devAllowed) {
     throw new Error(
       '[auth] refusing to verify sessions: this serving process is on the dev-only fallback secret. ' +
         'Set AUTH_SECRET in the project .env and restart (see RUNBOOK.md).',
@@ -88,6 +93,8 @@ export function getAuthSecret(argv: string[] = process.argv): string {
   }
 
   // FIX A: production + no secret → hard fail (no default value, ever).
+  // FIX H: NODE_ENV==='production' stays AUTHORITATIVE until the standalone
+  // migration (Task 19); ALLOW_DEV_SECRET=1 cannot weaken this branch.
   if (process.env.NODE_ENV === 'production' && !isBuildPhase) {
     throw new Error(
       'AUTH_SECRET is not set but NODE_ENV is production — refusing to start. ' +
@@ -99,7 +106,13 @@ export function getAuthSecret(argv: string[] = process.argv): string {
   if (isBuildPhase) {
     console.warn('[auth] AUTH_SECRET not set during build — build proceeds without a signing secret.');
   } else {
-    console.warn('[auth] AUTH_SECRET not set — using the dev-only insecure fallback. Never run production like this.');
+    // FIX H: reaching the sentinel from a serve requires ALLOW_DEV_SECRET=1 —
+    // loud either way, so it can never happen by accident.
+    console.warn(
+      process.env.ALLOW_DEV_SECRET === '1'
+        ? '[auth] AUTH_SECRET not set — using the dev-only insecure fallback because ALLOW_DEV_SECRET=1. NEVER ship this.'
+        : '[auth] AUTH_SECRET not set — using the dev-only insecure fallback. Never run production like this.',
+    );
   }
   return DEV_FALLBACK_SECRET;
 }
