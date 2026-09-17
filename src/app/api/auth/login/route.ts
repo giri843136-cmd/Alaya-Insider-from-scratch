@@ -2,8 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
-import { rateLimit, getClientIP } from '@/lib/rate-limit';
+import { rateLimit, getClientIP, IP_UNTRUSTABLE } from '@/lib/rate-limit';
 import { isLockedOut, recordFailure, recordSuccess, getLockStatus, MAX_FAILURES } from '@/lib/login-lockout';
+
+/**
+ * FIX B (TASK 2) — explicit policy when the client IP is untrustable
+ * (missing or unparseable X-Forwarded-For, i.e. the request did not come
+ * through our nginx edge):
+ *
+ *   FALL BACK TO ACCOUNT LOCK ONLY, PLUS A SHARED "UNTRUSTABLE" IP BUCKET.
+ *
+ * Why not refuse after N untrustable attempts outright: the account lock
+ * already bounds guessing per credential, and a blanket refusal would let an
+ * attacker DoS the admin login for everyone by simply stripping headers.
+ * The shared bucket keeps a coarse brake (MAX_FAILURES failures from ALL
+ * untrustable sources, e.g. direct-to-port scanners) without per-attacker
+ * granularity we cannot have anyway. Trusted-IP requests keep the exact
+ * per-IP behaviour.
+ */
 
 export async function POST(req: NextRequest) {
   ensureDbReady();
@@ -22,10 +38,12 @@ export async function POST(req: NextRequest) {
 
     // Durable lockout (sqlite): 5 consecutive failures lock the account AND
     // the source IP for 15 minutes. Checked before credential verification so
-    // locked identifiers never reach bcrypt.
+    // locked identifiers never reach bcrypt. Untrustable-IP requests share
+    // one lockout bucket (see the policy note above).
     const accountKey = String(email).trim().toLowerCase();
-    if (isLockedOut(accountKey, ip)) {
-      const status = getLockStatus(accountKey).locked ? getLockStatus(accountKey) : getLockStatus(ip);
+    const ipKey = ip === IP_UNTRUSTABLE ? 'shared:untrustable-ip' : ip;
+    if (isLockedOut(accountKey, ipKey)) {
+      const status = getLockStatus(accountKey).locked ? getLockStatus(accountKey) : getLockStatus(ipKey);
       const minutes = Math.max(1, Math.ceil(status.retryAfterSeconds / 60));
       return NextResponse.json(
         { error: `Too many failed attempts. Locked for ${minutes} more minute${minutes === 1 ? '' : 's'}.` },
@@ -42,7 +60,7 @@ export async function POST(req: NextRequest) {
     `).get(email, email) as any;
 
     if (!user || !verifyPassword(password, user.password_hash)) {
-      recordFailure(accountKey, ip);
+      recordFailure(accountKey, ipKey);
       const left = MAX_FAILURES - getLockStatus(accountKey).failures;
       return NextResponse.json(
         { error: left > 0 ? `Invalid credentials` : 'Too many failed attempts. Account locked for 15 minutes.' },
@@ -73,7 +91,9 @@ export async function POST(req: NextRequest) {
     }
 
     db.prepare("UPDATE users SET last_login = datetime('now') WHERE id = ?").run(user.id);
-    recordSuccess(accountKey);
+    // FIX C (TASK 2): successful login clears the lockout for BOTH the
+    // account and the IP/bucket that made this request.
+    recordSuccess(accountKey, ipKey);
 
     const authUser = {
       id: user.id,

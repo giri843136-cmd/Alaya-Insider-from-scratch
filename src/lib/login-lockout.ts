@@ -101,8 +101,13 @@ export function recordFailure(account: string, ip: string): void {
   }
 }
 
-/** Clear the account counter on successful login (the IP counter is left as-is). */
-export function recordSuccess(account: string): void {
+/**
+ * FIX C (TASK 2): clear the lockout for BOTH the account key and the IP (or
+ * shared untrustable bucket) key of the successful request, so a legit admin
+ * signing in is never stuck behind an IP counter accumulated from earlier
+ * failures.
+ */
+export function recordSuccess(account: string, ip: string): void {
   ensureTable();
-  getDb().prepare('DELETE FROM login_lockouts WHERE identifier = ?').run(account);
+  getDb().prepare('DELETE FROM login_lockouts WHERE identifier = ? OR identifier = ?').run(account, ip);
 }

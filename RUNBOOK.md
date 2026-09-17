@@ -301,6 +301,68 @@ Fallback mode is always one click away and is safe/compliant:
 
 ---
 
+## Admin login lockout (login_lockouts table)
+
+5 consecutive failed logins lock the **account** and the **source IP** for 15
+minutes (per identifier). Rows live in the app's sqlite DB, table
+`login_lockouts` (identifier, fail_count, locked_until, last_failure_at).
+Expired locks are ignored automatically — there is no cron and nothing to
+reset for normal operation.
+
+**Unlock a locked admin NOW (production, deliberate action only):**
+
+```bash
+# On the VPS. The better-sqlite3 CLI may not exist; use node with the app's own driver.
+cd /path/to/alaya-insider   # project root (DATABASE_PATH points at data/alaya.db)
+node -e "
+const db = require('better-sqlite3')(process.env.DATABASE_PATH || './data/alaya.db');
+const out = db.prepare(\"DELETE FROM login_lockouts WHERE identifier = ?\").run('<ip-or-email>');
+console.log('rows deleted:', out.changes);
+"
+```
+
+Replace `<ip-or-email>` with the exact locked identifier (the account key is
+the lowercased login email/username; the IP key is the leftmost
+X-Forwarded-For value, or `shared:untrustable-ip` for requests that arrived
+without a parseable one). Deleting the account row only clears the account
+lock; delete the IP row too if the source IP was also locked. Never run this
+as routine cleanup — it is for "I locked myself out" moments.
+
+**Row growth — no pruning is automatic.** `login_lockouts` rows are never
+deleted by the app (except by a successful login clearing that request's
+account+IP rows), so the table grows by one row per new account/IP that ever
+fails a login. In practice this is tiny (one row per attacker IP / typo), but
+if it ever matters, this is the safe manual cleanup — it removes ONLY rows
+whose lock already expired, never an active lock:
+
+```bash
+# On the VPS, same node -e pattern as above:
+node -e "
+const db = require('better-sqlite3')(process.env.DATABASE_PATH || './data/alaya.db');
+const out = db.prepare(\"DELETE FROM login_lockouts WHERE locked_until IS NOT NULL AND locked_until <= ?\").run(new Date().toISOString());
+console.log('expired rows deleted:', out.changes);
+"
+```
+
+Related hardening in the same change: the app **refuses to start** in
+production without `AUTH_SECRET` (no fallback secret exists anymore). If the
+app exits at boot with `AUTH_SECRET is not set`, generate one and add it to
+the project `.env`:
+
+```bash
+# Generate a long random secret (value is shown on YOUR terminal — never
+# paste it into tickets, chats, or git):
+openssl rand -base64 48
+# then: echo 'AUTH_SECRET=<paste the generated value>' >> .env && pm2 restart alayainsider
+
+# Prove it is set WITHOUT revealing it (prints length only, e.g. AUTH_SECRET length=64):
+node -e "console.log('AUTH_SECRET length=' + (process.env.AUTH_SECRET||'').trim().length)"
+# run via pm2 so it reads the app's real environment:
+pm2 env 0 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const m=d.match(/^AUTH_SECRET: (.*)$/m);console.log('AUTH_SECRET length='+(m?m[1].trim().length:0))})"
+```
+
+---
+
 ## Compliance notes (Amazon policy)
 
 - **Refresh cadence**: prices refresh hourly (1-hour cache per store) **and** carry an

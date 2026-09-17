@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
+import { getAuthSecret } from '@/lib/auth-secret';
 
 /**
  * Server-side gate for the admin panel.
@@ -18,12 +19,17 @@ import jwt from 'jsonwebtoken';
  * verification, since jsonwebtoken is not edge-compatible.
  * Read-only here: no DB access, no cookie mutation.
  *
+ * FIX A (TASK 2): no insecure secret fallback. getAuthSecret() throws at
+ * module load when NODE_ENV=production runs without AUTH_SECRET, so an
+ * under-configured deploy refuses to start instead of silently accepting
+ * attacker-forged cookies.
+ *
  * Defence in depth, not the only layer: every /api/* mutating handler keeps
  * its own getAuthUser() check, so authorization never depends on middleware
  * matching alone.
  */
 
-const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-only-insecure-secret-do-not-use-in-production';
+const AUTH_SECRET = getAuthSecret();
 
 function hasValidSession(req: NextRequest): boolean {
   const token = req.cookies.get('auth_token')?.value;

@@ -2,18 +2,12 @@ import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
 import { cookies, headers } from 'next/headers';
 import getDb from './db';
+import { getAuthSecret } from './auth-secret';
 
-// Production requires AUTH_SECRET. Development uses a fallback (NEVER use in production).
-const AUTH_SECRET = (() => {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret && process.env.NODE_ENV === 'production') {
-    // During build time, env vars may not be available yet — use fallback
-    if (typeof window === 'undefined' && process.env.NEXT_RUNTIME !== 'edge' && !process.env.CI) {
-      console.warn('AUTH_SECRET not set — using fallback during build. Set it at runtime.');
-    }
-  }
-  return secret || 'dev-only-insecure-secret-do-not-use-in-production';
-})();
+// TASK 2 FIX A: shared hard-fail guard — in production a missing AUTH_SECRET
+// throws at module load (no insecure fallback value, here or anywhere else).
+// Dev/test keeps a loudly-warned sentinel so local development still boots.
+const AUTH_SECRET = getAuthSecret();
 
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
 
