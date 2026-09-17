@@ -14,7 +14,8 @@ TASK-QUEUE STATE (updated 2026-09-17)
     500 (inline onClick beacons) is fixed by FIX I (TASK 2 follow-ups,
     2026-09-17) — invisible in prod only because the table is empty.
 [x] TASK 4 — quarantine fabricated price/rating fields (+ scripts/NULL-commercial-fields.ts)
-[x] TASK 5 — price-claim wording + OneLink sentence removal
+[x] TASK 5 — price-claim wording + OneLink sentence removal   (commit 7e92b55)
+[x] TASK 28 — hostinger deploy + rollback scripts             (deploy/rollback/RUNBOOK/DEPLOYS.md)
 ```
 
 ## Notes

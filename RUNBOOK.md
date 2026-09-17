@@ -473,3 +473,116 @@ Creators API credential secrets are stored encrypted in the DB (keyed by
 | Click beacon (direct anchors stay direct) | `src/app/api/clicks/route.ts`, `src/components/public/DestinationSelector.tsx` |
 | Standalone plumbing diagnostic (both token endpoints) | `scripts/diagnose-creators.js` |
 | Env reference | `.env.example` (CREATORS_*, CREATORS_US_*, GEOIP_DB_PATH, CRON_SECRET) |
+
+---
+
+## Deploying to Hostinger (TASK 28)
+
+Deploy and rollback are scripted; nothing deploys itself.
+
+```bash
+# from the app root ON the VPS:
+./scripts/deploy-hostinger.sh <40-char git sha>   # full run: pre-flight, DB backup,
+                                                  # gates, pm2 restart, 10-check verification
+./scripts/rollback-hostinger.sh                   # back to the previous sha (typed YES)
+```
+
+- The deploy script verifies the sha is an ancestor of `origin/main` (fetch only),
+  backs the sqlite DB up to `data/backups/` (keeps the last 5) before anything
+  restarts, runs `npm ci && npm test && npx tsc --noEmit && npm run build`
+  **against the target sha** (checkout happens before the gates; on gate failure
+  the worktree is restored and pm2 is never touched), then `pm2 restart
+  alayainsider --update-env && pm2 save`, then runs the 10-check verification
+  suite against https://alayainsider.com. ANY failure triggers the automatic
+  rollback path. Success appends a row to `DEPLOYS.md` — commit that row before
+  the next deploy (the worktree must be clean to deploy).
+- Only plain `git checkout` is ever used: no `reset --hard`, no `clean -fdx`,
+  no force-push anywhere in either script.
+
+### DEBUG_IP (edge-chain probe) — enable → probe → record → DISABLE
+
+`DEBUG_IP=1` turns on `GET /api/debug/peer-ip`, which echoes `via`,
+`x-real-ip`, `host` and the raw XFF chain — enough to fingerprint the edge.
+**Never leave it on.**
+
+```bash
+# 1) enable
+echo 'DEBUG_IP=1' >> .env && pm2 restart alayainsider --update-env
+
+# 2) run BOTH probes
+curl -s 'https://alayainsider.com/api/debug/peer-ip' -H 'X-Forwarded-For: 8.8.8.8'
+curl -s 'https://alayainsider.com/api/debug/peer-ip'
+
+# 3) record the verdict in DEPLOYS.md or your notes:
+#    - spoofed header SURVIVES (multi-element XFF, resolved=IP_UNTRUSTABLE)
+#      → hcdn APPENDS/passes XFF; per-IP lockout stays account-authoritative
+#      (the app rejects multi-element chains by design)
+#    - spoofed header GONE (single element, resolved = the IP nginx saw)
+#      → hcdn OVERWRITES XFF; per-IP lockout keys on real client IPs
+
+# 4) DISABLE — mandatory, same session
+sed -i '/^DEBUG_IP=/d' .env && pm2 restart alayainsider --update-env
+```
+
+The deploy verification suite fails if the debug route answers anything but 404,
+so a forgotten `DEBUG_IP=1` blocks the next deploy.
+
+### AUTH_SECRET rotation — two consequences, not one
+
+Rotating `AUTH_SECRET` (1) **invalidates all admin sessions** — everyone logs in
+again, and (2) **breaks decryption of the AES-stored Creators API Credential
+Secret** (it is encrypted keyed by `AUTH_SECRET`). After rotating, re-enter the
+Amazon credential **once** in `/admin` → Amazon API, then verify with the
+connection test. Symptom if you forget: `Secret decryption error` in the logs
+(troubleshooting table above).
+
+### TASK 4 NULLing — staging-first, always
+
+The commercial-field NULLing script touches live data if pointed at the wrong
+file. Run it staging-first:
+
+```bash
+# 1) copy
+cp data/alaya.db data/staging-copy.db
+# 2) dry-run on the copy (no writes; prints counts + the SQL)
+npx tsx scripts/NULL-commercial-fields.ts --db data/staging-copy.db
+# 3) apply on the copy (backs up values, then NULLs)
+npx tsx scripts/NULL-commercial-fields.ts --db data/staging-copy.db --apply
+# 4) verify the copy renders the way you expect (boot it on a scratch port),
+#    THEN, and only then, apply to the live DB during a quiet window:
+#    stop pm2, cp data/alaya.db data/backups/alaya-<stamp>.manual.db,
+#    run the script with --db data/alaya.db --apply, restart pm2.
+# Undo path (staging copy or restored backup):
+npx tsx scripts/NULL-commercial-fields.ts --db data/staging-copy.db --restore
+```
+
+The script refuses paths matching `alaya.db` or `/production/i` — the manual
+live run above is deliberately a stop-pm2-first, backup-first procedure.
+
+### nginx XFF overwrite — applied only when YOU reload nginx
+
+The `proxy_set_header X-Forwarded-For $remote_addr;` overwrite (commit `535afa2`)
+lives in `scripts/setup-nginx.sh`. It changes NOTHING on the server until you run:
+
+```bash
+bash scripts/setup-nginx.sh && nginx -t && systemctl reload nginx
+```
+
+**If `nginx -t` fails, do NOT reload — keep the old config** and fix the error
+first. A failed config test followed by a reload can take the site down;
+`nginx -t` failing means the written config is broken, and the running nginx
+still serves the previous (working) config until a successful reload.
+
+### DEPLOYS.md — per-deploy log
+
+`scripts/deploy-hostinger.sh` appends one row per successful deploy:
+
+| Column | Meaning |
+|---|---|
+| Date (UTC) | when the deploy finished |
+| Sha | the 40-char sha that is live |
+| Checks passed | e.g. `10/10` — the verification suite tally |
+| Rollback | `no` on success — change to `yes` (by hand) if you later run `scripts/rollback-hostinger.sh` |
+
+If the file does not exist, the deploy script creates it with the header row.
+Commit the appended row before the next deploy.
