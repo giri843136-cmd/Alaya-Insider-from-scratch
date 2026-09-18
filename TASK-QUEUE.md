@@ -5,17 +5,62 @@ One task per session. Mark `[x]` when committed.
 ## State block (update after every task)
 
 ```
-TASK-QUEUE STATE (updated 2026-09-17)
-[x] TASK 1 — public API allow-list                (commit 7c7c63d)
-[x] TASK 2 — server-side auth on /admin/* + login lockout   (commit see git log)
-[x] TASK 3 — Product JSON-LD: drop offers/aggregateRating
-    NOTE: ZERO published comparisons exist in    prod today (verify on the VPS
-    before relying on /compare/*). The /compare/[slug] server-component
-    500 (inline onClick beacons) is fixed by FIX I (TASK 2 follow-ups,
-    2026-09-17) — invisible in prod only because the table is empty.
+TASK-QUEUE STATE (updated 2026-09-18)
+
+DONE:
+[x] TASK 1 — public API allow-list                 (commit 7c7c63d)
+[x] TASK 2 — server-side auth on /admin/* + login lockout
+        (commits 0383d1f, d578eb3, 535afa2, 2d09b34, 61f3795)
+[x] TASK 3 — Product JSON-LD: drop offers/aggregateRating   (commit 15cc72d)
 [x] TASK 4 — quarantine fabricated price/rating fields (+ scripts/NULL-commercial-fields.ts)
-[x] TASK 5 — price-claim wording + OneLink sentence removal   (commit 7e92b55)
-[x] TASK 28 — hostinger deploy + rollback scripts             (deploy/rollback/RUNBOOK/DEPLOYS.md)
+        (commit ecd2e0d)
+[x] TASK 5 — price-claim wording + OneLink sentence removal  (commit 7e92b55)
+[x] FIX D/E/F/G/H/I — TASK 2 follow-ups (2026-09-17/18): client-owned CTA
+        beacon on compare pages (211c6c0), untrustable-IP lockout carve-out +
+        debug peer-IP route (2d09b34), standalone-serving detection + dev
+        sentinel gate (61f3795), hard-fail prod AUTH_SECRET + lockout
+        recovery docs (d578eb3), client-IP trust + AUTH_SECRET serving guard
+        (535afa2).
+
+NOT STARTED (work in this order):
+[ ] TASK 6  — link liveness
+[ ] TASK 11 — cache-control   (RUN EARLY: TASK 2's middleware stamps no-store
+        on every public page)
+[ ] TASK 7  — canonical + meta
+[ ] TASK 8  — og + og:image
+[ ] TASK 9  — image provenance CSV + alt
+[ ] TASK 10 — breadcrumb + sitemap
+[ ] TASK 12 — internal links
+[ ] TASK 13 — thin-content guard
+[ ] TASK 14 — product template v2
+[ ] TASK 15 — remove "Honest Review"/testing overclaims
+[ ] TASK 16 — journal depth + affiliate links
+[ ] TASK 17 — slug year fix
+[ ] TASK 17b — repo-file exposure check
+[ ] TASK 18 — click tracking via sendBeacon on the existing /api/clicks
+[ ] TASK 19 — static + ISR
+[ ] TASK 20 — performance
+[ ] TASK 21 — 50k headroom test
+[ ] TASK 22 — harden the EXISTING src/lib/creators-api.ts (do not rebuild;
+        keep PRICE_ENRICHMENT_ENABLED off)
+[ ] TASK 23 — GSC/Bing runbook
+[ ] TASK 24 — revenue report
+[ ] TASK 25 — deploy docs
+[ ] TASK 26 — drop `id` from public /api/categories
+[ ] TASK 27 — disclosure placement + contrast (today it is footer-only at
+        text-white/25)
+[ ] TASK 28 — deploy scripts (COMMITTED BUT UNUSABLE — commit b1f69af)
+        Deploy script rejected in review — 3 blocking defects (false FAIL
+        that auto-rolls back a healthy deploy; unsound DB backup; mutates the
+        live worktree).
+        CANONICAL deploy script: scripts/deploy-hostinger.sh (plus
+        scripts/rollback-hostinger.sh).
+        scripts/deploy.sh and scripts/security-setup.sh are NOT part of the
+        deploy path — NEVER run them on the VPS: they sed-edit .env in place
+        (rewriting the AUTH_SECRET line). Do not wire them into pm2, cron,
+        CI, or any runbook.
+[ ] TASK 28b — deploy restructure (NEXT: releases/<sha>/ + `current` symlink;
+        written plan pending approval, no script rewrite yet)
 ```
 
 ## Notes
