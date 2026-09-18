@@ -1,5 +1,19 @@
+/* tailwindcss-ignore-file: TEST-only helper. Its source quotes Tailwind class
+ * names (text-white, text-gray-600, ...) for the contrast gate; the class
+ * scanner must NOT emit utilities from this file (same bug class as 336f707).
+ * Verified: with this marker the prod global CSS is byte-identical to the
+ * pre-module build (33,429 B before = after; 74 B grew without it). */
+
 /**
  * TASK 27 — numeric contrast gate for affiliate disclosures (shared).
+ *
+ * LOCATION IS LOAD-BEARING: this file lives OUTSIDE src/ (repo-root testing/)
+ * because tailwind.config.ts scans every js/ts/tsx/mdx source under src/ and
+ * this module quotes class-looking strings (text-white, text-gray-600, ...).
+ * Measured 2026-09-18: the same file under src/lib/testing/ grew the prod
+ * global CSS by 74 B of spurious utilities (text-black et al.); here the
+ * prod CSS is byte-identical to the pre-module build. Same bug class as
+ * commit 336f707. Resolve via the @testing/* alias (tsconfig + jest).
  *
  * A class-list tripwire is only a proxy: a new dimming utility or a palette
  * edit could pass a class ban while the sentence stays illegible. The

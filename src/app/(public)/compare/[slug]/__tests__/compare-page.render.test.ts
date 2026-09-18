@@ -30,7 +30,7 @@ import {
   expectServedDisclosureCompliance,
   SERVED_DISCLOSURE_COVERAGE,
   upsertRenderTestProduct,
-} from '@/lib/testing/disclosure-contrast';
+} from '~/testing/disclosure-contrast';
 
 const PORT = 3217;
 const BASE = `http://127.0.0.1:${PORT}`;

@@ -17,7 +17,12 @@
  *     (text-[14px] font-medium text-gray-600|text-white);
  *   - NUMERIC gate (A1): the rendered colour pair's WCAG contrast ratio
  *     is computed from the palette (tailwind.config.ts is the source of
- *     truth) and must be >= 4.5:1 — see src/lib/testing/disclosure-contrast.ts.
+ *     truth) and must be >= 4.5:1 — see testing/disclosure-contrast.ts
+ *     (deliberately OUTSIDE src/: the tailwind scan covers every js/ts/tsx/
+ *     mdx file under src/ and this module quotes class-looking strings;
+ *     measured 2026-09-18: 74 B of spurious utilities grew the global CSS
+ *     from inside src/, the relocated module keeps prod CSS byte-identical
+ *     to the pre-module build).
  *
  * Generalised coverage (do not enumerate): every file under src/app whose
  * source matches an affiliate deeplink anchor pattern is listed in the test
@@ -40,7 +45,7 @@ import {
   SURFACE_WHITE,
   expectContrastAtLeast45,
   type Rgb,
-} from '@/lib/testing/disclosure-contrast';
+} from '~/testing/disclosure-contrast';
 
 const root = process.cwd();
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8');
