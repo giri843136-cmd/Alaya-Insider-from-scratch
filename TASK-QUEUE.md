@@ -54,8 +54,16 @@ NOT STARTED (work in this order):
 [ ] TASK 24 — revenue report
 [ ] TASK 25 — deploy docs
 [ ] TASK 26 — drop `id` from public /api/categories
-[ ] TASK 27 — disclosure placement + contrast (today it is footer-only at
-        text-white/25)
+[ ] TASK 27 — affiliate disclosure CONTRAST fix (implemented on
+        wip/task-27-disclosure, awaiting merge). Accurate statement: the
+        pre-merge VIOLATION was contrast — the footer rendered the sentence
+        at text-white/25 (~1.4:1, effectively invisible). Amazon requires
+        the sentence to be present and legible, NOT per-CTA placement, so
+        the footer alone satisfied placement; per-template adjacency
+        (disclosure immediately adjacent to the first CTA on product and
+        compare pages) is OUR OWN stricter standard, also implemented there
+        (>=14px, >=4.5:1, render-tested). TASK 16 will bring journal
+        in-content affiliate links under the adjacency rule.
 [x] TASK 28 — CANCELLED: built for a VPS that does not exist. Confirmed
         platform is Hostinger hPanel "Node.js app" (no pm2, no root, no SSH,
         no npm on the box; env vars live in hPanel, not .env). Commit

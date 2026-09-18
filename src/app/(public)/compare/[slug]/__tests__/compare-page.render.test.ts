@@ -89,5 +89,22 @@ d('compare page render (FIX I)', () => {
     // The CTA must still be a real, direct Amazon anchor (rel kept):
     expect(html).toMatch(/rel="[^"]*sponsored[^"]*"/);
     expect(html).not.toMatch(/href="\/go\//);
+
+    // TASK 27 — assert against the REAL rendered output: the Associate
+    // sentence appears next to both CTA rows and no disclosure element
+    // carries the banned low-contrast classes.
+    const disclosureCount = (html.match(/As an Amazon Associate I earn from qualifying purchases\./g) || []).length;
+    expect(disclosureCount).toBeGreaterThanOrEqual(2); // mobile cards + desktop table row
+    const disclosureClasses = [
+      ...html.matchAll(/class="([^"]*)"[^>]*>As an Amazon Associate I earn from qualifying purchases\./g),
+    ].map((m) => m[1]);
+    expect(disclosureClasses.length).toBeGreaterThanOrEqual(2);
+    for (const cls of disclosureClasses) {
+      expect(cls).toContain('text-[14px]');
+      expect(cls).toContain('font-medium');
+      expect(cls).not.toContain('text-white/25');
+      expect(cls).not.toContain('text-[10px]');
+      expect(cls).not.toContain('text-[11px]');
+    }
   }, 30000);
 });
