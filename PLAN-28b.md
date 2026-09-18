@@ -17,8 +17,9 @@ app-root/                      (e.g. /home/<user>/alaya-app)
   current -> releases/<sha>    symlink pm2 actually serves
   shared/data/alaya.db         THE database (moved once in the migration window)
   shared/uploads/              uploaded media (shared/uploads/images/...)
-  shared/logs/                 pm2 logs
-  shared/config/.env           source-of-truth env copy (never edited by scripts)
+  shared/logs/                 pm2 logs  shared/config/.env          THE one env copy (chmod 600, owned by the
+                              app user). Read by pm2 env_file — NEVER
+                              copied into releases/<sha>.
 ```
 
 ## DEFECT 1 — false FAIL that auto-rolls-back a healthy deploy
@@ -91,6 +92,9 @@ Planned build + swap:
   `shared/config/.env` (read-only — never written):
   `PORT=3999 HOSTNAME=127.0.0.1 ./node_modules/.bin/next start &` →
   poll `curl /` and `curl /product/le-creuset-skillet` for HTTP 200 (≤ 30 s)
+  → additionally assert `GET /auth-test.html` → 404 (the removed dev login
+  tester must stay gone) and `GET /admin` → 401 or 30x redirect (the
+  server-side admin gate is up)
   → kill the PID → verify the port is free. **Any failure: ABORT — remove
   `releases/<sha>/`, exit non-zero; pm2 untouched, live site untouched.**
 - Swap: `ln -sfn releases/<sha> current` → `pm2 restart alayainsider
@@ -131,12 +135,18 @@ Planned build + swap:
    `releases/<sha>/data/alaya.db` — an empty DB per deploy. Fix (no src
    change): after `git archive`, the script symlinks
    `releases/<sha>/data -> ../../shared/data` so the relative path traverses
-   into shared storage; AND copy `shared/config/.env` into the release with
-   an **absolute** `DATABASE_PATH=…/shared/data/alaya.db` as belt-and-braces.
-   The `.env` copy is mandatory anyway: `.env` is gitignored so `git archive`
-   does not include it, and commit d578eb3 hard-fails prod boot without
-   AUTH_SECRET. Same treatment for `uploads/` (see 5) and `logs/` (pm2
-   out_file is relative to cwd).
+   into shared storage. NO `.env` copies inside `releases/*`: pm2 loads the
+   single absolute `shared/config/.env` via `env_file` in
+   ecosystem.config.cjs (fallback if the installed pm2 lacks `env_file`:
+   the deploy script does `set -a; . <abs>/shared/config/.env; set +a`
+   before `pm2 restart --update-env` — still one file, never per-release).
+   The env is injected into the PROCESS, not the directory, so every
+   release sees the same absolute `DATABASE_PATH=…/shared/data/alaya.db`
+   and d578eb3's prod hard-fail on a missing AUTH_SECRET is satisfied
+   identically in every release. Same symlink treatment for `uploads/`
+   (see 5) and `logs/` (pm2 out_file is relative to cwd). 28c must also
+   add `/releases/`, `/shared/`, `/current` to .gitignore so an operator
+   can never accidentally commit them, and `chmod 600` the env file.
    **UNKNOWN:** whether the VPS .env already sets DATABASE_PATH (rules forbid
    me reading .env — user verifies during migration).
 5. **uploads/ — same defect class, no env escape.** Six call sites resolve
@@ -159,11 +169,19 @@ Planned build + swap:
 ## First-time migration (one maintenance window, site down ~10–15 min)
 
 1. `pm2 stop alayainsider`.
-2. Create `shared/{data,uploads,logs,config}`; `mv` today's
-   `data/alaya.db*` → `shared/data/`, move `uploads/` → `shared/uploads/`
-   (files live under `uploads/images/`), copy `.env` →
-   `shared/config/.env` (add absolute `DATABASE_PATH` at this point — the
-   only .env edit, done by hand, not by script).
+2. Create `shared/{data,uploads,logs,config}`; print `SELECT COUNT(*)`
+   for `products`, `categories` and `journal_posts` from the live DB
+   BEFORE the move, then `mv` today's `data/alaya.db*` → `shared/data/`,
+   move `uploads/` → `shared/uploads/` (files live under
+   `uploads/images/`), then print the same three counts AGAIN (now
+   resolved through the new shared path) and ABORT if any differs.
+   Repo note: `journal_posts` does NOT exist in `src/lib/schema.ts`
+   (journal content lives in `articles`/`pages`) — count it only if the
+   table exists on prod, else record NULL and compare NULL==NULL; never
+   skip the products/categories counts. Then `cp .env →
+   shared/config/.env` (adding the absolute `DATABASE_PATH` at this point
+   — the only .env edit, done by hand, not by script) and
+   `chmod 600 shared/config/.env`, owned by the app user.
 3. Run the NEW deploy script for current HEAD → builds
    `releases/<sha>/`, creates data/uploads/logs symlinks inside it, runs
    gates + boot smoke (pm2 is stopped; the smoke test runs independently).
@@ -175,6 +193,14 @@ Planned build + swap:
    fallback (28b never mutated it — see Defect 3).
    Migration rollback: `pm2 delete`, restore the old ecosystem cwd,
    `pm2 start` from the old dir (its node_modules/.next are untouched).
+
+## Capacity risk note (flagged in review — do NOT change in this task)
+
+`NODE_OPTIONS: '--max-old-space-size=200'` together with
+`max_memory_restart: '256M'` (ecosystem.config.cjs) is a 200 MB V8 heap
+ceiling that a 100k-session day can hit, driving pm2 restart storms.
+Recommend revisiting both values with TASK 19 (static + ISR) and TASK 20
+(performance); 28c must not touch them.
 
 ## Out of scope for 28b implementation
 
