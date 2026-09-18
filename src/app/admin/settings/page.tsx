@@ -11,6 +11,12 @@ export default function AdminSettings() {
   const [twoFaSetup, setTwoFaSetup] = useState<{ secret: string; uri: string; qr: string } | null>(null);
   const [twoFaCode, setTwoFaCode] = useState('');
   const [twoFaLoading, setTwoFaLoading] = useState(false);
+  // TASK 30: self-service password change
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     adminFetch('/api/settings').then(r => r.json()).then(d => { setSettings(d.settings || {}); setLoading(false); });
@@ -63,6 +69,30 @@ export default function AdminSettings() {
       { key: 'analytics_id', label: 'Google Analytics ID (G-XXXXXXXXXX)' },
     ]},
   ];
+
+  const handleChangePassword = async () => {
+    setPwMsg(null);
+    if (pwNew !== pwConfirm) { setPwMsg({ kind: 'err', text: 'New passwords do not match' }); return; }
+    if (pwNew.length < 12) { setPwMsg({ kind: 'err', text: 'New password must be at least 12 characters' }); return; }
+    setPwBusy(true);
+    try {
+      const res = await adminFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: pwCurrent, new_password: pwNew }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setPwMsg({ kind: 'ok', text: 'Password changed. Use the new password at your next login.' });
+        setPwCurrent(''); setPwNew(''); setPwConfirm('');
+      } else {
+        setPwMsg({ kind: 'err', text: data.error || 'Password change failed' });
+      }
+    } catch {
+      setPwMsg({ kind: 'err', text: 'Error connecting to server' });
+    }
+    setPwBusy(false);
+  };
 
   const handle2FASetup = async () => {
     setTwoFaLoading(true);
@@ -122,6 +152,30 @@ export default function AdminSettings() {
       </div>
 
       <div className="space-y-6">
+      {/* TASK 30: Change Own Password */}
+      <div className="bg-white border border-gray-100 rounded-lg p-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-1">Change Password</h2>
+        <p className="text-xs text-gray-400 mb-4">Change your own admin password. Minimum 12 characters.</p>
+        {pwMsg && (
+          <p className={`text-xs mb-3 ${pwMsg.kind === 'ok' ? 'text-green-600' : 'text-red-600'}`} role={pwMsg.kind === 'ok' ? 'status' : 'alert'}>{pwMsg.text}</p>
+        )}
+        <div className="space-y-3 max-w-sm">
+          <input type="password" placeholder="Current password" autoComplete="current-password"
+            value={pwCurrent} onChange={e => setPwCurrent(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm" />
+          <input type="password" placeholder="New password (min 12 chars)" autoComplete="new-password"
+            value={pwNew} onChange={e => setPwNew(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm" />
+          <input type="password" placeholder="Confirm new password" autoComplete="new-password"
+            value={pwConfirm} onChange={e => setPwConfirm(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm" />
+          <button onClick={handleChangePassword} disabled={pwBusy || !pwCurrent || !pwNew || !pwConfirm}
+            className="px-4 py-2 bg-accent text-white text-sm rounded-md disabled:opacity-50">
+            {pwBusy ? 'Changing...' : 'Change Password'}
+          </button>
+        </div>
+      </div>
+
       {/* 2FA Security Section */}
       <div className="bg-white border border-gray-100 rounded-lg p-6">
         <h2 className="text-sm font-semibold text-gray-700 mb-1">Two-Factor Authentication (2FA)</h2>

@@ -4,6 +4,11 @@ One task per session. Mark `[x]` when committed.
 
 ## State block (update after every task)
 
+WORKFLOW RULE (2026-09-18, user-mandated): **NO `git push origin main`.**
+Production auto-deploys from main on push, so merging to main = deploying.
+Every task commits to branch `wip/<task>` only, pushes THAT branch, and
+STOPS. Only the user authorises merges to main, after review.
+
 ```
 TASK-QUEUE STATE (updated 2026-09-18)
 
@@ -51,18 +56,44 @@ NOT STARTED (work in this order):
 [ ] TASK 26 — drop `id` from public /api/categories
 [ ] TASK 27 — disclosure placement + contrast (today it is footer-only at
         text-white/25)
-[ ] TASK 28 — deploy scripts (COMMITTED BUT UNUSABLE — commit b1f69af)
-        Deploy script rejected in review — 3 blocking defects (false FAIL
-        that auto-rolls back a healthy deploy; unsound DB backup; mutates the
-        live worktree).
-        CANONICAL deploy script: scripts/deploy-hostinger.sh (plus
-        scripts/rollback-hostinger.sh).
-        scripts/deploy.sh and scripts/security-setup.sh are NOT part of the
-        deploy path — NEVER run them on the VPS: they sed-edit .env in place
-        (rewriting the AUTH_SECRET line). Do not wire them into pm2, cron,
-        CI, or any runbook.
-[ ] TASK 28b — deploy restructure (NEXT: releases/<sha>/ + `current` symlink;
-        written plan pending approval, no script rewrite yet)
+[x] TASK 28 — CANCELLED: built for a VPS that does not exist. Confirmed
+        platform is Hostinger hPanel "Node.js app" (no pm2, no root, no SSH,
+        no npm on the box; env vars live in hPanel, not .env). Commit
+        b1f69af and both scripts stay as a dead record — NOT the deploy path.
+[x] TASK 28b — CANCELLED with it: releases/<sha>/ + `current` symlink +
+        pm2 are meaningless on hPanel. PLAN-28b.md stays as the RECORD;
+        retain its DB-backup (VACUUM INTO + integrity_check, FATAL on
+        failure) and boot-verification ideas; drop releases//current/pm2
+        entirely.
+[x] scripts/deploy.sh + scripts/security-setup.sh — NON-FUNCTIONAL AND
+        NOT-DEPLOY-PATH (verified 2026-09-18): both sed-WRITE .env
+        (deploy.sh lines 81–91 incl. AUTH_SECRET rewrite;
+        security-setup.sh lines 9–11). On hPanel, .env is not the env
+        mechanism — never run either script.
+[ ] TASK 28d — DEPLOY ASSET SYNC, run from the USER's machine (NOT written
+        yet; blocked until the user supplies the hPanel app root, start
+        command and env var NAMES). Local npm ci && npm test && tsc &&
+        npm run build -> upload .next, node_modules, public, package.json,
+        ecosystem-agnostic start script -> backup data/alaya.db FIRST
+        (better-sqlite3 VACUUM INTO, or a node script reading a user-provided
+        db file) -> user restarts from hPanel -> only then delete stale
+        public/auth-test.html and public/visual-test.html from the DEPLOYED
+        public/ dir and prove a 404 with a curl. MUST refuse to run if any
+        file matching /(auth-test|visual-test|debug|login)/i exists in
+        public/. No .env upload, no secret in any script. Overwrites in
+        place: .next/, node_modules/, public/, package.json. Rollback:
+        restore the previous .next + restart from hPanel.
+[ ] TASK 30 (URGENT — NEXT CODE TASK) — admin self-service password change.
+        IMPLEMENTED on wip/task-30-password, AWAITING USER MERGE: POST
+        /api/auth/change-password (session-gated) + src/lib/change-password.ts
+        + Settings "Change Password" card + tests. Current password
+        required, bcrypt cost 10, new password >= 12 chars, never logged or
+        returned; test proves a wrong current password cannot change the
+        hash. URGENT because
+        raw.githubusercontent.com/giri843136-cmd/Alaya-Insider-from-scratch/eb09a2e^/public/auth-test.html
+        still serves the credential literals (the repo is PUBLIC) — the fix
+        is ROTATION, not deletion: deletion cannot remove old blobs from a
+        public repo. NEVER print those values.
 ```
 
 ## Notes

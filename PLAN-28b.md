@@ -1,5 +1,15 @@
 # PLAN-28b — deploy restructure: releases/ + `current` symlink
 
+> STATUS (2026-09-18): CANCELLED AS BUILT — wrong platform. Confirmed runtime
+> is Hostinger hPanel "Node.js app": no VPS, no root, no SSH, no pm2, no
+> on-box git checkout; env vars live in hPanel, not .env; production
+> auto-deploys from main on push. This file is kept as the RECORD only:
+> the DB-backup ideas (better-sqlite3 VACUUM INTO + integrity_check, FATAL
+> on failure) and the boot-verification ideas (spare-port smoke test,
+> HTTP-200-assert-before-parsing checks) carry into TASK 28d. The
+> releases/, `current` symlink, pm2, worktree and symlink-swap mechanics
+> are dropped entirely.
+
 Planning only. **No script, src/ or .env file is modified in this step.**
 `scripts/deploy-hostinger.sh` and `scripts/rollback-hostinger.sh` (commit b1f69af,
 rejected in review — 3 blocking defects, recorded in TASK-QUEUE.md) stay
