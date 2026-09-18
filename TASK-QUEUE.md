@@ -54,8 +54,22 @@ NOT STARTED (work in this order):
 [ ] TASK 24 — revenue report
 [ ] TASK 25 — deploy docs
 [ ] TASK 26 — drop `id` from public /api/categories
-[ ] TASK 27 — disclosure placement + contrast (today it is footer-only at
-        text-white/25)
+[ ] TASK 27 — affiliate disclosure CONTRAST fix (implemented on
+        wip/task-27-disclosure, awaiting merge). Accurate statement: the
+        pre-merge VIOLATION was contrast — the footer rendered the sentence
+        at text-white/25 (~1.4:1, effectively invisible). Amazon requires
+        the sentence to be present and legible, NOT per-CTA placement, so
+        the footer alone satisfied placement; per-template adjacency
+        (disclosure immediately adjacent to the first CTA on product and
+        compare pages) is OUR OWN stricter standard, also implemented there
+        (>=14px, >=4.5:1, render-tested). TASK 16 will bring journal
+        in-content affiliate links under the adjacency rule.
+        CARRIER-SCAN LIMIT (recorded verbatim 2026-09-18): ProductCTA.tsx is
+        a legitimate affiliate anchor whose disclosure is rendered one level
+        up by DestinationSelector, so file-level registration covers NEW
+        carriers only and cannot detect a refactor that moves the sentence
+        away from an existing one. The served-bytes assertion on the product
+        page is the real protection; the scan is a tripwire.
 [x] TASK 28 — CANCELLED: built for a VPS that does not exist. Confirmed
         platform is Hostinger hPanel "Node.js app" (no pm2, no root, no SSH,
         no npm on the box; env vars live in hPanel, not .env). Commit
@@ -70,21 +84,80 @@ NOT STARTED (work in this order):
         (deploy.sh lines 81–91 incl. AUTH_SECRET rewrite;
         security-setup.sh lines 9–11). On hPanel, .env is not the env
         mechanism — never run either script.
-[ ] TASK 28d — DEPLOY ASSET SYNC, run from the USER's machine (NOT written
-        yet; blocked until the user supplies the hPanel app root, start
-        command and env var NAMES). Local npm ci && npm test && tsc &&
-        npm run build -> upload .next, node_modules, public, package.json,
-        ecosystem-agnostic start script -> backup data/alaya.db FIRST
-        (better-sqlite3 VACUUM INTO, or a node script reading a user-provided
-        db file) -> user restarts from hPanel -> only then delete stale
-        public/auth-test.html and public/visual-test.html from the DEPLOYED
-        public/ dir and prove a 404 with a curl. MUST refuse to run if any
-        file matching /(auth-test|visual-test|debug|login)/i exists in
-        public/. No .env upload, no secret in any script. Overwrites in
-        place: .next/, node_modules/, public/, package.json. Rollback:
-        restore the previous .next + restart from hPanel.
-[ ] TASK 30 (URGENT — NEXT CODE TASK) — admin self-service password change.
-        IMPLEMENTED on wip/task-30-password, AWAITING USER MERGE: POST
+[x] TASK 28d — CANCELLED (2026-09-18): unnecessary and unsafe on this
+        platform. VERIFIED FACTS: production auto-deploys from main via
+        hPanel — a merge to main was LIVE on the next curl (new
+        POST /api/auth/change-password returned 401 JSON where it 404'd
+        before the merge; 12 unauthenticated POSTs returned 401 while the
+        shared login limiter allowed TEN requests per its 60 s window and
+        returned the first 429 on the ELEVENTH (10/60 s per code)); /admin still
+        302s to /admin/login; /api/products?limit=1 still returns exactly
+        the 12 allow-listed fields with status absent. main is the ONLY
+        deploy trigger. A manual .next/node_modules upload would rewrite
+        every file around the live SQLite DB and risks clobbering data/ —
+        never do it.
+[ ] TASK 31 — DB durability (PROPOSED — do not implement blind): on this
+        hosting the SQLite file is the only copy of the catalogue and every
+        deploy rewrites the files around it. Plan a scheduled snapshot of
+        data/alaya.db via better-sqlite3 VACUUM INTO into a NON-public
+        path, retaining N copies, with PLAN-28b's -wal/-shm handling
+        (copy alongside if present; integrity_check the backup; any
+        failure is FATAL/loud). NEVER snapshot into public/. PREREQUISITE
+        (before any snapshot logic is written): harden /api/uploads/[filename]
+        with realpath containment (realpathSync the uploads dir and the
+        candidate; 404 unless the resolved path starts with the resolved
+        uploads dir + path.sep), killing the sibling-prefix flaw and the
+        symlink-following read. [DONE 2026-09-18 on
+        wip/task-31-snapshot-hardening: route.ts realpathSync containment +
+        uploads-route.containment.test.ts — fs-spy symlink-equivalent proof
+        (404, EMPTY body, zero bytes read) + e2e on-disk symlink suite that
+        runs on symlink-capable hosts; this Windows sandbox cannot create
+        symlinks (EPERM), so the e2e layer is a NAMED GAP there, reported
+        loudly by the suite, never silent. NOTE: commit d20843b accidentally
+        dropped this prerequisite block; restored here.] HARD RULES
+        (agreed 2026-09-18, before any implementation):
+        - Snapshots may ONLY be written to a configurable SNAPSHOT_DIR;
+          default = REFUSE TO RUN. If the resolved absolute path starts
+          with <appRoot>/public OR lies inside the app root AT ALL, ABORT
+          with a non-zero exit and NO file written. Never "just use
+          ./backups inside the project".
+        - Tests: assert the computed snapshot path is NOT under public/
+          (implementation-time, needs the path resolver to exist), and a
+          snapshot file existing in public/ fails the suite — that second
+          assertion is ALREADY WIRED in public-dir.guard.test.ts
+          (public/ must contain no *.db/*.sqlite* files).
+        - Snapshot filenames contain NO secret material and NO PII.
+        - Retention deletes oldest-first and MUST NEVER delete the file
+          currently being written.
+        UNKNOWN without hPanel: the real app-root path; whether any path
+        OUTSIDE the app dir is writable; whether hPanel cron can run an
+        internal script or only trigger an HTTP endpoint (if HTTP-only: a
+        /api/cron/snapshot route guarded by CRON_SECRET writing to
+        SNAPSHOT_DIR).
+[ ] TASK 32 — hourly price-refresh wiring (BLOCKED on user): needs env
+        var NAMES CREATORS_* (client id/secret) + CRON_SECRET set in
+        hPanel — values are the user's to paste, never the agent's to
+        print or read. Stays inert until the Creators API is configured in
+        Admin -> Amazon API. CONFIRMED (2026-09-18):
+        /api/cron/amazon-prices accepts header `x-cron-secret` (alias
+        `x-api-key`, or ?secret=) — the SAME header name the admin page
+        documents (src/app/admin/amazon/page.tsx:532-536); accepts POST
+        and GET. Sub-item (security): query-string secrets land in access
+        logs — prefer HEADER-ONLY auth for cron calls; the user verified a
+        bogus secret -> 401. If GET stays supported, document that the URL
+        with ?secret= must NEVER be pasted into a public place (the admin
+        page renders a Copy-able block for this endpoint). Doc fix needed
+        when wiring: the admin page still says CRON_SECRET "lives in
+        .env" — on hPanel it is an env var.
+
+QUEUE ORDER AFTER 31/32: resume TASK 27 (disclosure placement + contrast —
+        1x per page today, footer-only at text-white/25), then TASK 11
+        (cache-control — TASK 2's middleware no-ops every public page;
+        critical now that hcdn sits in front), then the original order.
+
+[x] TASK 30 — admin self-service password change (DONE; merged to main
+        4bb7620 with the merge-review fixes below, LIVE in production):
+        POST
         /api/auth/change-password (session-gated) + src/lib/change-password.ts
         + Settings "Change Password" card + tests. Current password
         required, bcrypt cost 10, new password >= 12 chars, never logged or
@@ -107,6 +180,11 @@ NOT STARTED (work in this order):
 ```
 
 ## Notes
+
+- PROCESS RULE (user-mandated 2026-09-18, recorded in the TASK 31 step-1
+  commit): **force-push is allowed ONLY on unmerged wip branches. NEVER on
+  main. NEVER after a task has been review-approved.** Prefer a new commit
+  over amending once the user has seen the sha.
 
 - TASK 1 (done): allow-list in `src/lib/public-product.ts`; applied to
   `/api/products`, `/api/products/[id]`, `/api/brands`, `/api/categories` and

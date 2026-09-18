@@ -58,7 +58,11 @@ export default function Footer() {
               </a>
             </div>
             <p className="text-[11px] text-white/25">We may earn commissions from affiliate links. <Link href="/affiliate-disclosure" className="underline hover:text-white/40">Learn more</Link></p>
-            <p className="text-[11px] text-white/25">As an Amazon Associate I earn from qualifying purchases.</p>
+            {/* TASK 27: compliance floor — the Associate sentence must be
+                readable wherever it renders. On the accent footer (#2d2b3d)
+                white is ~13.8:1; text-white/25 was ~1.4:1 and is BANNED for
+                this sentence (asserted in disclosure-compliance.test.ts). */}
+            <p className="text-[14px] font-medium text-white">As an Amazon Associate I earn from qualifying purchases.</p>
           </div>
         </div>
       </div>

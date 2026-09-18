@@ -165,8 +165,11 @@ export default function DestinationSelector({ product, compact = false }: Props)
         )}
       </div>
 
-      <p className="text-[11px] text-gray-400 mt-4">{honestPriceNote}</p>
-      <p className="text-[11px] text-gray-400 mt-1">{associateDisclosure}</p>
+      <p className="text-[14px] text-gray-400 mt-4">{honestPriceNote}</p>
+      {/* TASK 27: disclosure must be >=14px and >=4.5:1 against its background
+          (was text-[11px] text-gray-400). text-[14px] font-medium on white is
+          ~7.0:1. Compliance tests assert these classes. */}
+      <p className="text-[14px] font-medium text-gray-600 mt-1">{associateDisclosure}</p>
     </div>
   );
 }

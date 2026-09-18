@@ -48,4 +48,11 @@ describe('public/ directory security guard', () => {
       .filter((f) => fs.readFileSync(f, 'utf8').includes('/api/auth/login'));
     expect(offenders).toEqual([]);
   });
+
+  it('contains no database or snapshot files (TASK 31: snapshots must never live in public/)', () => {
+    const offenders = walk(publicDir).filter((f) =>
+      /\.(db|sqlite|sqlite3|db-wal|db-shm|bak)$/i.test(path.basename(f)),
+    );
+    expect(offenders).toEqual([]);
+  });
 });

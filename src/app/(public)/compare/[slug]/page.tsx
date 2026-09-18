@@ -65,7 +65,8 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                   {p.cta_text || 'Check Price'}
                 </CtaLink>
                 <PaidLinkTag className="mt-1" />
-                <p className="text-[10px] text-gray-400 mt-1">As an Amazon Associate I earn from qualifying purchases.</p>
+                {/* TASK 27: >=14px, >=4.5:1 (was text-[10px] text-gray-400). */}
+                <p className="text-[14px] font-medium text-gray-600 mt-1">As an Amazon Associate I earn from qualifying purchases.</p>
               </div>
             ))}
           </div>
@@ -108,7 +109,8 @@ export default async function ComparisonPage({ params }: { params: Promise<{ slu
                         {p.cta_text || 'Check Price'}
                       </CtaLink>
                       <PaidLinkTag className="mt-1" />
-                      <p className="text-[10px] text-gray-400 mt-1">As an Amazon Associate I earn from qualifying purchases.</p>
+                      {/* TASK 27: >=14px, >=4.5:1 (was text-[10px] text-gray-400). */}
+                      <p className="text-[14px] font-medium text-gray-600 mt-1">As an Amazon Associate I earn from qualifying purchases.</p>
                     </td>
                   ))}
                 </tr>

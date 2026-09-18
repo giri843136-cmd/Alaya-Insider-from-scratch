@@ -12,11 +12,25 @@
  *      error + the direct Amazon CTA still present.
  * Skips when no production build or no dev DB exists (run `npm run build`
  * first; on a fresh clone without a seeded DB there is nothing to render).
+ *
+ * TASK 27 (A2): assertions against the SERVED bytes — the Associate sentence
+ * must appear in `next start` output and every disclosure element in that
+ * output must pass the NUMERIC contrast gate (>= 4.5:1). This is THE
+ * next-start + fetch-HTML suite: it GETs BOTH affiliate templates (compare
+ * AND product, the latter for a fixture slug) and registers each fetched
+ * page in SERVED_DISCLOSURE_COVERAGE; a test here fails if any file under
+ * src/app that renders an affiliate link is NOT covered by a page actually
+ * fetched (and disclosure-asserted) in this suite.
  */
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import {
+  expectServedDisclosureCompliance,
+  SERVED_DISCLOSURE_COVERAGE,
+  upsertRenderTestProduct,
+} from '~/testing/disclosure-contrast';
 
 const PORT = 3217;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -89,5 +103,83 @@ d('compare page render (FIX I)', () => {
     // The CTA must still be a real, direct Amazon anchor (rel kept):
     expect(html).toMatch(/rel="[^"]*sponsored[^"]*"/);
     expect(html).not.toMatch(/href="\/go\//);
+
+    // TASK 27 (A2) — assert against the REAL rendered output: the Associate
+    // sentence appears next to both CTA rows (mobile cards + desktop row)
+    // and EVERY disclosure element in the served bytes passes the NUMERIC
+    // contrast gate (>= 4.5:1) — not just a class-list ban.
+    const served = expectServedDisclosureCompliance(html, '/compare/[slug]');
+    expect(served.count).toBeGreaterThanOrEqual(2); // mobile cards + desktop table row
   }, 30000);
+
+  it('TASK 27 A2: the product page SERVES at least one disclosure line for a fixture slug, contrast-compliant in the served bytes', async () => {
+    // Insert the fixture product AFTER boot: the page is force-dynamic and
+    // reads the scratch DB per request (same pattern as the comparison above).
+    const Database = require('better-sqlite3');
+    const db = new Database(scratchDb);
+    const PRODUCT_SLUG = 'render-test-product';
+    upsertRenderTestProduct(db, { slug: PRODUCT_SLUG, name: 'Render Test Disclosure Product' });
+    db.close();
+
+    const res = await fetch(`${BASE}/product/${PRODUCT_SLUG}`);
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    // Real page render (no vacuous pass on a 404/error shell):
+    expect(html).toContain('Render Test Disclosure Product');
+    // The served anchor is a real direct Amazon deeplink:
+    expect(html).toMatch(/href="https:\/\/www\.amazon\.(in|com)\/dp\/B0RENDERTEST1\?tag=/);
+    expect(html).toMatch(/rel="[^"]*sponsored[^"]*"/);
+
+    // THE requirement: >= 1 disclosure line IN THE SERVED BYTES, and every
+    // disclosure element in those bytes passes the NUMERIC >= 4.5:1 gate.
+    const served = expectServedDisclosureCompliance(html, '/product/[slug]');
+    // DestinationSelector's per-CTA sentence + the Footer's site-wide one:
+    expect(served.count).toBeGreaterThanOrEqual(2);
+
+    // Registered ONLY after the served-bytes assertions above PASSED. The
+    // second entry is the wiring wrapper rendered INSIDE the page just
+    // fetched — its output was in the served bytes we asserted, so its
+    // coverage comes from this very fetch.
+    SERVED_DISCLOSURE_COVERAGE.add('src/app/(public)/product/[slug]/page.tsx');
+    SERVED_DISCLOSURE_COVERAGE.add('src/app/(public)/product/[slug]/ProductCTA.tsx');
+  }, 30000);
+
+  it('TASK 27 A2: every affiliate-carrier file under src/app is covered by a served-bytes page in this suite', () => {
+    // Escape hatch ONLY for a forced build from a pre-27 commit:
+    // ALAYA_SKIP_DISCLOSURE_COVERAGE=1 npm run build
+    if (process.env.ALAYA_SKIP_DISCLOSURE_COVERAGE === '1') {
+      // eslint-disable-next-line no-console
+      console.warn('[TASK 27 A2] coverage map SKIPPED — build was forced with ALAYA_SKIP_DISCLOSURE_COVERAGE=1');
+      return;
+    }
+    // Served-bytes coverage is recorded by BOTH next-start suites (compare
+    // here, product in product-page.render.test.ts).
+    SERVED_DISCLOSURE_COVERAGE.add('src/app/(public)/compare/[slug]/page.tsx');
+
+    const appDir = path.join(process.cwd(), 'src', 'app');
+    const carriers: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (/\.tsx$/.test(e.name)) {
+          const src = fs.readFileSync(full, 'utf8');
+          if (
+            /<a\b[^>]*href=["']https:\/\/www\.amazon\.(in|com)\/dp/.test(src) ||
+            /<(CtaLink|DestinationSelector|ProductCTA)\b/.test(src)
+          ) {
+            carriers.push(path.relative(process.cwd(), full).replace(/\\/g, '/'));
+          }
+        }
+      }
+    };
+    walk(appDir);
+    expect(carriers.length).toBeGreaterThanOrEqual(1);
+    const uncovered = carriers.filter((f) => !SERVED_DISCLOSURE_COVERAGE.has(f));
+    // eslint-disable-next-line no-console
+    console.log('[TASK 27 A2] affiliate carriers: ' + carriers.join(', '));
+    // eslint-disable-next-line no-console
+    console.log('[TASK 27 A2] served-bytes coverage: ' + [...SERVED_DISCLOSURE_COVERAGE].join(', '));
+    expect(uncovered).toEqual([]);
+  });
 });
