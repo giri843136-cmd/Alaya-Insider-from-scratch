@@ -74,8 +74,9 @@ NOT STARTED (work in this order):
         platform. VERIFIED FACTS: production auto-deploys from main via
         hPanel — a merge to main was LIVE on the next curl (new
         POST /api/auth/change-password returned 401 JSON where it 404'd
-        before the merge; 12 unauthenticated POSTs returned 401 until the
-        shared 10/min login limiter started returning 429); /admin still
+        before the merge; 12 unauthenticated POSTs returned 401 while the
+        shared login limiter allowed TEN requests per its 60 s window and
+        returned the first 429 on the ELEVENTH (10/60 s per code)); /admin still
         302s to /admin/login; /api/products?limit=1 still returns exactly
         the 12 allow-listed fields with status absent. main is the ONLY
         deploy trigger. A manual .next/node_modules upload would rewrite
@@ -87,12 +88,26 @@ NOT STARTED (work in this order):
         data/alaya.db via better-sqlite3 VACUUM INTO into a NON-public
         path, retaining N copies, with PLAN-28b's -wal/-shm handling
         (copy alongside if present; integrity_check the backup; any
-        failure is FATAL/loud). NEVER snapshot into public/. UNKNOWN
-        without hPanel: the real app-root path; whether any path OUTSIDE
-        the app dir is writable; whether hPanel cron can run an internal
-        script or only trigger an HTTP endpoint (if HTTP-only: a
-        /api/cron/snapshot route guarded by CRON_SECRET writing inside the
-        app dir).
+        failure is FATAL/loud). NEVER snapshot into public/. HARD RULES
+        (agreed 2026-09-18, before any implementation):
+        - Snapshots may ONLY be written to a configurable SNAPSHOT_DIR;
+          default = REFUSE TO RUN. If the resolved absolute path starts
+          with <appRoot>/public OR lies inside the app root AT ALL, ABORT
+          with a non-zero exit and NO file written. Never "just use
+          ./backups inside the project".
+        - Tests: assert the computed snapshot path is NOT under public/
+          (implementation-time, needs the path resolver to exist), and a
+          snapshot file existing in public/ fails the suite — that second
+          assertion is ALREADY WIRED in public-dir.guard.test.ts
+          (public/ must contain no *.db/*.sqlite* files).
+        - Snapshot filenames contain NO secret material and NO PII.
+        - Retention deletes oldest-first and MUST NEVER delete the file
+          currently being written.
+        UNKNOWN without hPanel: the real app-root path; whether any path
+        OUTSIDE the app dir is writable; whether hPanel cron can run an
+        internal script or only trigger an HTTP endpoint (if HTTP-only: a
+        /api/cron/snapshot route guarded by CRON_SECRET writing to
+        SNAPSHOT_DIR).
 [ ] TASK 32 — hourly price-refresh wiring (BLOCKED on user): needs env
         var NAMES CREATORS_* (client id/secret) + CRON_SECRET set in
         hPanel — values are the user's to paste, never the agent's to
@@ -101,8 +116,13 @@ NOT STARTED (work in this order):
         /api/cron/amazon-prices accepts header `x-cron-secret` (alias
         `x-api-key`, or ?secret=) — the SAME header name the admin page
         documents (src/app/admin/amazon/page.tsx:532-536); accepts POST
-        and GET. Doc fix needed when wiring: the admin page still says
-        CRON_SECRET "lives in .env" — on hPanel it is an env var.
+        and GET. Sub-item (security): query-string secrets land in access
+        logs — prefer HEADER-ONLY auth for cron calls; the user verified a
+        bogus secret -> 401. If GET stays supported, document that the URL
+        with ?secret= must NEVER be pasted into a public place (the admin
+        page renders a Copy-able block for this endpoint). Doc fix needed
+        when wiring: the admin page still says CRON_SECRET "lives in
+        .env" — on hPanel it is an env var.
 
 QUEUE ORDER AFTER 31/32: resume TASK 27 (disclosure placement + contrast —
         1x per page today, footer-only at text-white/25), then TASK 11
