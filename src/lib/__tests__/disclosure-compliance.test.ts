@@ -14,7 +14,10 @@
  *   - the OUTPUT must not contain the banned low-contrast utility classes
  *     on disclosure elements;
  *   - the resolved colour+size must come from the rendered markup
- *     (text-[14px] font-medium text-gray-600|text-white).
+ *     (text-[14px] font-medium text-gray-600|text-white);
+ *   - NUMERIC gate (A1): the rendered colour pair's WCAG contrast ratio
+ *     is computed from the palette (tailwind.config.ts is the source of
+ *     truth) and must be >= 4.5:1 — see src/lib/testing/disclosure-contrast.ts.
  *
  * Generalised coverage (do not enumerate): every file under src/app whose
  * source matches an affiliate deeplink anchor pattern is listed in the test
@@ -22,15 +25,23 @@
  * be a known wiring-only wrapper whose rendered child carries it. Ground
  * truth today: only product + compare pages carry deeplinks (home,
  * /products, journal, category have zero sponsored links).
- * The /compare/[slug] rows additionally have a full server-render test in
- * compare-page.render.test.ts (real `next start` output).
+ * SERVED-bytes coverage lives in the compare-page render suite and the
+ * product-page render suite (real `next start` output, fixture products) —
+ * an affiliate-carrier file with NO rendered-page coverage in those suites
+ * fails that suite's coverage map.
  */
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  SENTENCE,
+  SURFACE_ACCENT,
+  SURFACE_WHITE,
+  expectContrastAtLeast45,
+  type Rgb,
+} from '@/lib/testing/disclosure-contrast';
 
-const SENTENCE = 'As an Amazon Associate I earn from qualifying purchases.';
 const root = process.cwd();
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8');
 
@@ -52,11 +63,14 @@ function disclosureElements(html: string): { classes: string; text: string }[] {
   return out;
 }
 
-function expectCompliant(el: { classes: string; text: string }) {
+function expectCompliant(el: { classes: string; text: string }, surface: Rgb) {
   expect(el.text).toContain(SENTENCE);
   expect(el.classes).toContain('text-[14px]');
   expect(el.classes).toContain('font-medium');
   expect(el.classes).toMatch(/text-(gray-600|white)(?![\w/-])/);
+  // NUMERIC gate (TASK 27) FIRST: the pair the browser paints must clear
+  // 4.5:1 — this is the real invariant; the class bans below are tripwires.
+  expectContrastAtLeast45(el.classes, surface, 'component render');
   // banned low-contrast utilities must not be on the disclosure element
   expect(el.classes).not.toContain('text-white/25');
   expect(el.classes).not.toContain('text-white/30');
@@ -71,7 +85,7 @@ describe('TASK 27: disclosure compliance in RENDERED output', () => {
     expect(countIn(html)).toBeGreaterThanOrEqual(1);
     const els = disclosureElements(html);
     expect(els.length).toBeGreaterThanOrEqual(1);
-    for (const el of els) expectCompliant(el);
+    for (const el of els) expectCompliant(el, SURFACE_ACCENT); // footer bg is bg-accent
   });
 
   it('DestinationSelector (product-page CTA) renders the sentence >=1x, compliant', () => {
@@ -89,7 +103,7 @@ describe('TASK 27: disclosure compliance in RENDERED output', () => {
     expect(countIn(html)).toBeGreaterThanOrEqual(1);
     const els = disclosureElements(html);
     expect(els.length).toBeGreaterThanOrEqual(1);
-    for (const el of els) expectCompliant(el);
+    for (const el of els) expectCompliant(el, SURFACE_WHITE); // product page surface is white
   });
 
   it('PaidLinkTag stays a per-CTA label but never carries the Associate sentence', () => {
@@ -153,7 +167,7 @@ describe('TASK 27: disclosure compliance in RENDERED output', () => {
     expect(productSrc).toContain('<ProductCTA');
   });
 
-  it('rendered size/colour resolve from markup: 14px + font-medium + compliant colour on EVERY disclosure element in all rendered components', () => {
+  it('rendered size/colour resolve from markup: 14px + font-medium + compliant colour + numeric >=4.5:1 on EVERY disclosure element in all rendered components', () => {
     const Footer = require('@/components/public/Footer').default;
     const DestinationSelector = require('@/components/public/DestinationSelector').default;
     const product = {
@@ -165,7 +179,8 @@ describe('TASK 27: disclosure compliance in RENDERED output', () => {
       renderToStaticMarkup(React.createElement(Footer)),
       renderToStaticMarkup(React.createElement(DestinationSelector, { product })),
     ];
-    for (const html of htmls) {
+    const surfaces: Rgb[] = [SURFACE_ACCENT, SURFACE_WHITE];
+    for (const [i, html] of htmls.entries()) {
       const els = disclosureElements(html);
       expect(els.length).toBeGreaterThanOrEqual(1);
       for (const el of els) {
@@ -173,6 +188,8 @@ describe('TASK 27: disclosure compliance in RENDERED output', () => {
         expect(el.classes).toMatch(/text-\[14px\]/);
         expect(el.classes).toMatch(/text-(gray-600|white)(?![\w/-])/);
         expect(el.classes).not.toMatch(/text-white\/\d/); // no alpha-dimmed white anywhere on it
+        // numeric gate on the template's real surface (footer first, selector second)
+        expectContrastAtLeast45(el.classes, surfaces[i], i === 0 ? 'Footer' : 'DestinationSelector');
       }
     }
   });
