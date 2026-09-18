@@ -37,6 +37,8 @@ NOT STARTED (work in this order):
 [ ] TASK 16 — journal depth + affiliate links
 [ ] TASK 17 — slug year fix
 [ ] TASK 17b — repo-file exposure check
+        purge scripts/price-workflow.md from history; rotate credentials for
+        that host; repo was public since 68a016b (2026-08-24)
 [ ] TASK 18 — click tracking via sendBeacon on the existing /api/clicks
 [ ] TASK 19 — static + ISR
 [ ] TASK 20 — performance
