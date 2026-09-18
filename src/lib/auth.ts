@@ -3,6 +3,7 @@ import bcryptjs from 'bcryptjs';
 import { cookies, headers } from 'next/headers';
 import getDb from './db';
 import { getAuthSecret, assertUsableSessionSecret } from './auth-secret';
+import { sessionInvalidatedAt } from './change-password';
 
 // TASK 2 FIX A: shared hard-fail guard — in production a missing AUTH_SECRET
 // throws at module load (no insecure fallback value, here or anywhere else).
@@ -92,6 +93,23 @@ export async function getAuthUser(): Promise<AuthUser | null> {
 
   if (!user) {
     return null;
+  }
+
+  // TASK 30 — sign out everywhere: tokens issued at or before the user's
+  // last credential change are dead. users.updated_at is written ONLY by the
+  // password-change flow (grep-verified: login writes last_login, 2FA writes
+  // two_factor_*) — so no other action can invalidate sessions, and no DB
+  // schema change is needed. sessionInvalidatedAt fails OPEN on absent or
+  // unparseable timestamps (a data hiccup must not log everyone out); seeded
+  // and legacy rows carry their creation timestamp, which predates every
+  // issued token, so nobody is spuriously logged out. Boundary: updated_at
+  // has second precision, so a token issued in the same second as the
+  // change may linger for up to 1 second.
+  if (typeof decoded.iat === 'number') {
+    const invalidatedAt = sessionInvalidatedAt(user.updated_at);
+    if (invalidatedAt !== null && decoded.iat * 1000 <= invalidatedAt) {
+      return null;
+    }
   }
 
   return {

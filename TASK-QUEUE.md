@@ -89,7 +89,17 @@ NOT STARTED (work in this order):
         + Settings "Change Password" card + tests. Current password
         required, bcrypt cost 10, new password >= 12 chars, never logged or
         returned; test proves a wrong current password cannot change the
-        hash. URGENT because
+        hash. Merge-review fixes (same branch): (1) the endpoint shares the
+        EXACT login buckets — in-memory rateLimit(login:<ip>, 10/min) AND the
+        durable sqlite lockout (isLockedOut/recordFailure/recordSuccess,
+        UNTRUSTABLE_BUCKET carve-out), checked BEFORE bcrypt; wrong
+        current-password guesses lock the account at 5 failures (route test
+        proves 429 without reaching bcrypt). (2) SIGN OUT EVERYWHERE: success
+        clears the auth_token cookie AND getAuthUser rejects tokens whose iat
+        predates users.updated_at — written ONLY by the password-change flow
+        (grep-verified), fail-open on unparseable timestamps, no schema
+        change; ≤1 s token-grace from second-precision timestamps.
+        URGENT because
         raw.githubusercontent.com/giri843136-cmd/Alaya-Insider-from-scratch/eb09a2e^/public/auth-test.html
         still serves the credential literals (the repo is PUBLIC) — the fix
         is ROTATION, not deletion: deletion cannot remove old blobs from a
