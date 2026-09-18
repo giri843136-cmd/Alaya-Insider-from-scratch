@@ -96,7 +96,19 @@ NOT STARTED (work in this order):
         data/alaya.db via better-sqlite3 VACUUM INTO into a NON-public
         path, retaining N copies, with PLAN-28b's -wal/-shm handling
         (copy alongside if present; integrity_check the backup; any
-        failure is FATAL/loud). NEVER snapshot into public/. HARD RULES
+        failure is FATAL/loud). NEVER snapshot into public/. PREREQUISITE
+        (before any snapshot logic is written): harden /api/uploads/[filename]
+        with realpath containment (realpathSync the uploads dir and the
+        candidate; 404 unless the resolved path starts with the resolved
+        uploads dir + path.sep), killing the sibling-prefix flaw and the
+        symlink-following read. [DONE 2026-09-18 on
+        wip/task-31-snapshot-hardening: route.ts realpathSync containment +
+        uploads-route.containment.test.ts — fs-spy symlink-equivalent proof
+        (404, EMPTY body, zero bytes read) + e2e on-disk symlink suite that
+        runs on symlink-capable hosts; this Windows sandbox cannot create
+        symlinks (EPERM), so the e2e layer is a NAMED GAP there, reported
+        loudly by the suite, never silent. NOTE: commit d20843b accidentally
+        dropped this prerequisite block; restored here.] HARD RULES
         (agreed 2026-09-18, before any implementation):
         - Snapshots may ONLY be written to a configurable SNAPSHOT_DIR;
           default = REFUSE TO RUN. If the resolved absolute path starts
@@ -162,6 +174,11 @@ QUEUE ORDER AFTER 31/32: resume TASK 27 (disclosure placement + contrast —
 ```
 
 ## Notes
+
+- PROCESS RULE (user-mandated 2026-09-18, recorded in the TASK 31 step-1
+  commit): **force-push is allowed ONLY on unmerged wip branches. NEVER on
+  main. NEVER after a task has been review-approved.** Prefer a new commit
+  over amending once the user has seen the sha.
 
 - TASK 1 (done): allow-list in `src/lib/public-product.ts`; applied to
   `/api/products`, `/api/products/[id]`, `/api/brands`, `/api/categories` and
