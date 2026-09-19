@@ -112,6 +112,12 @@ export default function ProductEditor({ productId }: Props) {
         showToast('Cannot publish — missing required fields');
       } else if (res.status === 401) {
         showToast('Session expired — please sign in again');
+      } else if (data.field_errors && Object.keys(data.field_errors).length > 0) {
+        // WAVE 0.5: server-validated, per-field messages — show the first one
+        // directly; every message is human-readable and names its field.
+        const firstMessage = Object.values(data.field_errors)[0] as string;
+        showToast(firstMessage);
+        console.warn('Field validation errors:', data.field_errors);
       } else {
         showToast(data.error || 'Save failed — please try again');
       }

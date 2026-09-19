@@ -52,7 +52,9 @@ export default function AdminProducts() {
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Archive "${name}"? This can be undone.`)) return;
-    await adminFetch(`/api/products/${id}`, { method: 'DELETE' });
+    // WAVE 0.5: writes live on the double-gated admin route now — the public
+    // /api/products DELETE answers 401 to everyone.
+    await adminFetch(`/api/admin/products/${id}`, { method: 'DELETE' });
     showToast(`"${name}" archived`);
     fetchProducts();
   };
@@ -60,7 +62,7 @@ export default function AdminProducts() {
   const handleBulkDelete = async () => {
     if (!confirm(`Archive ${selected.size} products?`)) return;
     for (const id of Array.from(selected)) {
-      await adminFetch(`/api/products/${id}`, { method: 'DELETE' });
+      await adminFetch(`/api/admin/products/${id}`, { method: 'DELETE' });
     }
     setSelected(new Set());
     showToast(`${selected.size} products archived`);
