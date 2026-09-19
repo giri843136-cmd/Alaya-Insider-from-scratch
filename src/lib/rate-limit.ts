@@ -47,19 +47,19 @@ export function rateLimit(
 /**
  * Client IP for rate-limiting and per-IP login lockout (TASK 2 FIX B + FIX D).
  *
- * Deployment chain: client → hcdn (Hostinger CDN) → nginx (setup-nginx.sh:
- * `proxy_set_header X-Forwarded-For $remote_addr` — OVERWRITE, not append)
- * → Node.
+ * Deployment chain: client → hcdn (Hostinger CDN) → Node (hPanel Node.js
+ * runtime). There is no nginx layer we control; the edge is configured in
+ * hPanel and must OVERWRITE X-Forwarded-For, not append.
  *
- * FIX D: nginx overwrites X-Forwarded-For with the single address hcdn handed
- * it, so a correctly-configured edge produces a ONE-element header. A header
- * with MORE than one comma-separated element therefore cannot have passed
- * through our overwrite (client-injected at the last hop, or an nginx running
- * an old config) — it is treated as spoofed and the request is marked
+ * FIX D: a correctly-configured edge overwrites X-Forwarded-For with the
+ * single address it saw, so a well-formed header has ONE element. A header
+ * with MORE than one comma-separated element therefore cannot have come from
+ * a compliant edge (client-injected at the last hop, or an appending proxy
+ * in front of us) — it is treated as spoofed and the request is marked
  * IP_UNTRUSTABLE even if the leftmost value parses as a valid IP.
  *
  *  - X-Real-IP is deliberately NOT trusted: it is trivially settable by the
- *    client, and nginx overwrites it anyway.
+ *    client, and the edge overwrites it anyway.
  *  - X-Forwarded-Host / Forwarded (RFC 7239) are not set anywhere in this
  *    stack, so they are not read.
  *

@@ -1,5 +1,15 @@
 # RUNBOOK — Going live with the Amazon Creators API (Amazon.in + Amazon.com)
 
+> **PLATFORM TRUTH (2026-09-19, supersedes any pm2/SSH/.env/nginx instruction
+> below):** production is the Hostinger **hPanel Node.js runtime**. There is
+> no VPS, no root, no SSH, no pm2, no on-box shell, no nginx layer we control.
+> **Push to `main` IS the deploy** (automatic, within seconds); **revert-and-
+> push IS the rollback**. Environment variables live in hPanel, not in a
+> `.env` file. Legacy pm2/`.env`/VPS passages in this document pre-date that
+> discovery and are scheduled for the TASK 25 rewrite; nothing in this repo
+> references a deploy or rollback script any more (they were removed from
+> HEAD and a test keeps them out).
+
 This is the step-by-step guide for **alayainsider.com**. The site is a
 **dual-store** system:
 
@@ -345,23 +355,24 @@ console.log('expired rows deleted:', out.changes);
 "
 ```
 
-**`X-Forwarded-For` and the per-IP lockout — ONE switch (FIX D + FIX G).**
-The per-IP login lockout is only as real as the edge's XFF handling, so the
-nginx config and its verification are one unit, not two independent
-settings.
+**`X-Forwarded-For` and the per-IP lockout — ONE unit (FIX D + FIX G).**
+The per-IP login lockout is only as real as the edge's XFF handling. There is
+no nginx layer we control: the platform chain is client → hcdn (Hostinger CDN)
+→ Node (hPanel Node.js runtime), and the edge is configured in hPanel, not by
+any script in this repo.
 
-1. **nginx config (the switch):** `scripts/setup-nginx.sh` sets
-   `proxy_set_header X-Forwarded-For $remote_addr;` — OVERWRITE, never
-   `$proxy_add_x_forwarded_for` (appending preserves the attacker's header:
-   `X-Forwarded-For: 8.8.8.8` would arrive as `8.8.8.8, <hcdn-ip>,
-   <nginx-ip>` and any code reading that chain reads attacker input). The
+1. **Edge behaviour to confirm (hPanel-side, not repo-side):** the platform
+   edge must OVERWRITE `X-Forwarded-For` with the single address it saw —
+   never append (appending preserves the attacker's header:
+   `X-Forwarded-For: 8.8.8.8` would arrive as `8.8.8.8, <hcdn-ip>` and any
+   code reading that chain reads attacker input). The
    app additionally rejects ANY multi-element XFF header as spoofed
    (`IP_UNTRUSTABLE`), and the shared untrustable bucket **records but never
    locks** — the account lock is authoritative — so no XFF failure mode can
    lock legitimate logins out (self-DoS) or bypass the account lock. Never
    reintroduce `$proxy_add_x_forwarded_for` in front of this app, and never
    use any `X-Forwarded-*` value for an authorization decision.
-2. **Single verification command (run after any edge/nginx change).**
+2. **Single verification command (run after any edge change).**
    Enable the debug echo once on the VPS (`echo 'DEBUG_IP=1' >> .env && pm2
    restart alayainsider --update-env`), run BOTH curls, then remove
    `DEBUG_IP` and restart again:
@@ -434,7 +445,8 @@ Creators API credential secrets are stored encrypted in the DB (keyed by
   and the TASK 3/5 removals (JSON-LD offers/ratings, price-claim copy) must be
   revisited in the same change. **CSV/admin entry must never repopulate
   `current_price`/`rating`/`review_count`** — those columns stay NULL until an
-  official source exists (see `scripts/NULL-commercial-fields.ts`).
+  official source exists (the NULLing script was removed from HEAD; the
+  quarantine is enforced in schema/code — see TASK 4).
 - **Refresh cadence**: prices refresh hourly (1-hour cache per store). While
   `PRICE_ENRICHMENT_ENABLED` is unset the enricher is a display no-op and nothing
   is shown; the cache only feeds the admin/ops surfaces.
@@ -478,26 +490,17 @@ Creators API credential secrets are stored encrypted in the DB (keyed by
 
 ## Deploying to Hostinger (TASK 28)
 
-Deploy and rollback are scripted; nothing deploys itself.
+Deploy and rollback are push-driven: pushing or merging to `main` deploys
+automatically on the Hostinger hPanel Node.js runtime (no deploy script, no
+pm2, no SSH, no on-box git checkout; env vars live in hPanel, not .env).
+There is no rollback script — a rollback IS `git revert <sha> && git push`,
+which deploys the revert within seconds.
 
 ```bash
-# from the app root ON the VPS:
-./scripts/deploy-hostinger.sh <40-char git sha>   # full run: pre-flight, DB backup,
-                                                  # gates, pm2 restart, 10-check verification
-./scripts/rollback-hostinger.sh                   # back to the previous sha (typed YES)
+# from your workstation:
+git push origin main          # deploy
+git revert --no-edit <sha> && git push origin main   # rollback
 ```
-
-- The deploy script verifies the sha is an ancestor of `origin/main` (fetch only),
-  backs the sqlite DB up to `data/backups/` (keeps the last 5) before anything
-  restarts, runs `npm ci && npm test && npx tsc --noEmit && npm run build`
-  **against the target sha** (checkout happens before the gates; on gate failure
-  the worktree is restored and pm2 is never touched), then `pm2 restart
-  alayainsider --update-env && pm2 save`, then runs the 10-check verification
-  suite against https://alayainsider.com. ANY failure triggers the automatic
-  rollback path. Success appends a row to `DEPLOYS.md` — commit that row before
-  the next deploy (the worktree must be clean to deploy).
-- Only plain `git checkout` is ever used: no `reset --hard`, no `clean -fdx`,
-  no force-push anywhere in either script.
 
 ### DEBUG_IP (edge-chain probe) — enable → probe → record → DISABLE
 
@@ -536,53 +539,32 @@ Amazon credential **once** in `/admin` → Amazon API, then verify with the
 connection test. Symptom if you forget: `Secret decryption error` in the logs
 (troubleshooting table above).
 
-### TASK 4 NULLing — staging-first, always
+### Commercial fields stay NULL until an official source exists
 
-The commercial-field NULLing script touches live data if pointed at the wrong
-file. Run it staging-first:
+The NULLing script was removed from HEAD (WAVE 0 cleanup) and never runs
+against production; the quarantine lives in schema and code, not in a
+script. Commercial columns (`current_price`, `previous_price`, `rating`,
+`review_count`, `currency`, `in_stock` semantics) stay NULL/absent unless
+TASK 22/32 bring an official-API source, and the public projection strips
+them regardless.
 
-```bash
-# 1) copy
-cp data/alaya.db data/staging-copy.db
-# 2) dry-run on the copy (no writes; prints counts + the SQL)
-npx tsx scripts/NULL-commercial-fields.ts --db data/staging-copy.db
-# 3) apply on the copy (backs up values, then NULLs)
-npx tsx scripts/NULL-commercial-fields.ts --db data/staging-copy.db --apply
-# 4) verify the copy renders the way you expect (boot it on a scratch port),
-#    THEN, and only then, apply to the live DB during a quiet window:
-#    stop pm2, cp data/alaya.db data/backups/alaya-<stamp>.manual.db,
-#    run the script with --db data/alaya.db --apply, restart pm2.
-# Undo path (staging copy or restored backup):
-npx tsx scripts/NULL-commercial-fields.ts --db data/staging-copy.db --restore
-```
-
-The script refuses paths matching `alaya.db` or `/production/i` — the manual
-live run above is deliberately a stop-pm2-first, backup-first procedure.
-
-### nginx XFF overwrite — applied only when YOU reload nginx
-
-The `proxy_set_header X-Forwarded-For $remote_addr;` overwrite (commit `535afa2`)
-lives in `scripts/setup-nginx.sh`. It changes NOTHING on the server until you run:
-
-```bash
-bash scripts/setup-nginx.sh && nginx -t && systemctl reload nginx
-```
-
-**If `nginx -t` fails, do NOT reload — keep the old config** and fix the error
-first. A failed config test followed by a reload can take the site down;
-`nginx -t` failing means the written config is broken, and the running nginx
-still serves the previous (working) config until a successful reload.
+The platform edge (hcdn) is configured in hPanel, not in this repo. The
+app-side protection is what this repo owns and tests: it rejects ANY
+multi-element XFF header as spoofed (`IP_UNTRUSTABLE`) — never reintroduce an
+appending proxy in front of this app, and never use any `X-Forwarded-*` value
+for an authorization decision.
 
 ### DEPLOYS.md — per-deploy log
 
-`scripts/deploy-hostinger.sh` appends one row per successful deploy:
+DEPLOYS.md records one row per push-deploy (kept by hand now that deploys are
+push-driven):
 
 | Column | Meaning |
 |---|---|
 | Date (UTC) | when the deploy finished |
 | Sha | the 40-char sha that is live |
 | Checks passed | e.g. `10/10` — the verification suite tally |
-| Rollback | `no` on success — change to `yes` (by hand) if you later run `scripts/rollback-hostinger.sh` |
+| Rollback | `no` on success — change to `yes` (by hand) if you later revert-and-push |
 
-If the file does not exist, the deploy script creates it with the header row.
-Commit the appended row before the next deploy.
+Deploys are push-driven (hPanel auto-deploys `main`); keep the row committed
+by hand before the next push.

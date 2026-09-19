@@ -64,18 +64,16 @@ They must **NOT** be inside `.next/` or any ephemeral directory.
 
 ## Deployment
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete VPS deployment instructions.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for deployment instructions.
 
-### Quick Deploy
+**How deploys actually work:** the site runs on the Hostinger hPanel Node.js
+runtime — no VPS, no SSH, no pm2. **Push to `main` IS the deploy** (automatic,
+within seconds) and **revert-and-push IS the rollback**. Environment variables
+live in hPanel, not in a `.env` file. Run the gates before every push:
 
 ```bash
-# On VPS
-git clone <repo-url> /var/www/alayainsider
-cd /var/www/alayainsider
-npm install
-cp .env.example .env   # Edit with real credentials
-npm run build
-pm2 start npm --name alayainsider -- start
+npm test && npx tsc --noEmit && npm run build
+git push origin main    # this IS the deploy
 ```
 
 ## Features

@@ -1,5 +1,14 @@
 # Alaya Insider — Deployment Guide
 
+> **PLATFORM TRUTH (2026-09-19, supersedes the VPS/pm2 instructions below):**
+> production is the Hostinger **hPanel Node.js runtime** — no VPS, no root,
+> no SSH, no pm2, no reverse proxy we control. **Push to `main` IS the
+> deploy**; **revert-and-push IS the rollback**; environment variables live
+> in hPanel, not in a `.env` file. The VPS passages below are legacy from a
+> platform assumption that turned out to be wrong; the TASK 25 rewrite
+> replaces them. (`ecosystem.config.cjs` is retained only as a record of the
+> memory tuning that hPanel's runtime makes unnecessary.)
+
 ## Requirements
 
 - **Node.js** 18+ (tested with 22.x)
@@ -165,14 +174,13 @@ pm2 restart alayainsider
 ### View Logs
 ```bash
 pm2 logs alayainsider
-```
+```### Update Code
 
-### Update Code
 ```bash
-git pull origin main
-npm install
-npm run build
-pm2 restart alayainsider
+# On your workstation — pushing IS the deploy on hPanel:
+npm test && npx tsc --noEmit && npm run build
+git push origin main
+# Rollback: git revert --no-edit <sha> && git push origin main
 ```
 
 ## LiteSpeed 503 Error Page (Hostinger)

@@ -10,13 +10,13 @@
 > releases/, `current` symlink, pm2, worktree and symlink-swap mechanics
 > are dropped entirely.
 
-Planning only. **No script, src/ or .env file is modified in this step.**
-`scripts/deploy-hostinger.sh` and `scripts/rollback-hostinger.sh` (commit b1f69af,
-rejected in review — 3 blocking defects, recorded in TASK-QUEUE.md) stay
-untouched until this plan is approved. Canonical deploy script remains
-`scripts/deploy-hostinger.sh`; `scripts/deploy.sh` and
-`scripts/security-setup.sh` are NOT part of the deploy path (they sed-edit
-.env in place and must never run on the VPS).
+Record only. The deploy/rollback scripts this plan would have replaced
+(commit b1f69af, rejected in review — 3 blocking defects, recorded in
+TASK-QUEUE.md) were REMOVED from HEAD in the 2026-09-19 cleanup, together
+with the two leftover VPS helpers (the .env sed-editors that were never part
+of the deploy path) and the commercial-field NULLing script. Deploys are
+push-to-main on the hPanel Node.js runtime; this plan's releases/ + symlink
+mechanics are superseded history.
 
 ## Target layout on the VPS
 

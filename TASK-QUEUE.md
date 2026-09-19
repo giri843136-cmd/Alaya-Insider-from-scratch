@@ -88,6 +88,26 @@ NOT STARTED (work in this order):
         retain its DB-backup (VACUUM INTO + integrity_check, FATAL on
         failure) and boot-verification ideas; drop releases//current/pm2
         entirely.
+[x] WAVE 0 FILE DELETION (executed 2026-09-19, user-approved; one commit,
+        live-verified per RULE 11): REMOVED FROM HEAD — scripts/deploy-hostinger.sh,
+        scripts/rollback-hostinger.sh, scripts/setup-nginx.sh, scripts/deploy.sh,
+        scripts/security-setup.sh, scripts/NULL-commercial-fields.ts (the VPS
+        that never existed; the last one wrote NULLs into product data). Every
+        reference repaired: DEPLOYS.md header, RUNBOOK.md (deploy/rollback
+        section → push-deploy truth; XFF switch section → hPanel-side edge;
+        NULLing runbook → schema/code quarantine note; DEPLOYS.md column doc),
+        README.md deploy section → push-deploy truth, DEPLOYMENT.md (truth
+        banner + Update Code → push/revert), PLAN-28b.md record (de-pathed),
+        src/lib/rate-limit.ts:50 comment → real chain (hcdn → Node, no nginx).
+        KEPT per owner instruction: .env.example, ecosystem.config.cjs (pm2
+        doc text remains for the TASK 25 rewrite; RUNBOOK/DEPLOYMENT now carry
+        a PLATFORM TRUTH banner stating: hPanel Node runtime, push to main IS
+        the deploy, revert-and-push IS the rollback, env vars in hPanel, no
+        nginx layer we control). GUARD: dead-vps-artifacts.guard.test.ts fails
+        the build if any of the six paths is re-tracked or referenced as
+        tooling anywhere outside this ledger. History note: git history still
+        holds all six files (and price-workflow.md from 0.2) — rotation, not
+        rewriting, remains the chosen remedy.
 [x] scripts/deploy.sh + scripts/security-setup.sh — NON-FUNCTIONAL AND
         NOT-DEPLOY-PATH (verified 2026-09-18): both sed-WRITE .env
         (deploy.sh lines 81–91 incl. AUTH_SECRET rewrite;
