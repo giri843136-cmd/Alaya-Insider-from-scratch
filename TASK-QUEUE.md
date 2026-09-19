@@ -62,6 +62,26 @@ NOT STARTED (work in this order):
 [ ] TASK 23 — GSC/Bing runbook
 [ ] TASK 24 — revenue report
 [ ] TASK 25 — deploy docs
+[x] TASK 11 — cache-control (DONE 2026-09-19, WAVE 1; one commit,
+        live-verified per RULE 11 with the double-curl proof). MIDDLEWARE
+        AUDIT BEFORE (src/middleware.ts): /admin/* authed+redirect no-store
+        (41-51), /admin/login no-store (55-58), /api/admin/* no-store
+        (62-71) — all kept verbatim; the DEFAULT branch (87-93) stamped
+        'no-store, no-cache, must-revalidate, proxy-revalidate' + Pragma:
+        no-cache + Expires: 0 + Surrogate-Control: no-store on EVERYTHING
+        public — HTML, images, robots.txt, sitemap — forcing hcdn to re-fetch
+        origin for every request (the cache mistake). NEW POLICY: /api/*
+        (non-admin) stays no-store; any cookie-bearing request to a public
+        path stays no-store (defence in depth); anonymous public images get
+        'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800'
+        + matching Surrogate-Control; anonymous public HTML/robots/sitemap
+        get 'public, max-age=0, must-revalidate, s-maxage=300,
+        stale-while-revalidate=86400'. NO Vary on cookies (must-not-vary-on-
+        cookie: the cached object IS the anonymous render); no Set-Cookie is
+        added. Tests: middleware.cache-policy.test.ts (9). next.config.mjs
+        /admin/:path* no-store unchanged. HCDN CAVEAT (unverifiable from the
+        repo): whether hcdn honours s-maxage/Surrogate-Control is host-side;
+        the prod double-curl proof below shows what the edge actually does.
 [ ] TASK 26 — drop `id` from public /api/categories
 [ ] TASK 27 — affiliate disclosure CONTRAST fix (implemented on
         wip/task-27-disclosure, awaiting merge). Accurate statement: the

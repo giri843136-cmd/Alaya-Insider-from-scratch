@@ -88,12 +88,55 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // ── Default: public pages get the existing no-cache treatment ───────────
+  // ── Non-admin APIs: dynamic, never CDN-cached ───────────────────────────
+  // Route handlers own their data freshness; caching JSON here risks serving
+  // one user's error/empty state to another. Explicit no-store keeps the
+  // pre-TASK-11 guarantee for APIs while public HTML becomes cacheable below.
+  if (pathname === '/api' || pathname.startsWith('/api/')) {
+    const res = NextResponse.next();
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.headers.set('Pragma', 'no-cache');
+    return res;
+  }
+
+  // ── Any authenticated request to a non-admin path: never cache ──────────
+  // A response rendered for a session-bearing request must never enter a
+  // shared cache — defence in depth even though public pages are identical
+  // for anonymous and logged-in visitors.
+  if (request.cookies.get('auth_token')?.value) {
+    const res = NextResponse.next();
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.headers.set('Pragma', 'no-cache');
+    return res;
+  }
+
+  // ── TASK 11: anonymous public traffic becomes CDN-cacheable ───────────
+  // Deliberately NO `Vary` on cookies (must-not-vary-on-cookie): the cached
+  // object is the anonymous render, identical for every visitor.
+  const IMAGE_RE = /\.(png|jpe?g|webp|avif|gif|svg|ico|woff2?|ttf|otf)$/i;
   const response = NextResponse.next();
-  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  response.headers.set('Pragma', 'no-cache');
-  response.headers.set('Expires', '0');
-  response.headers.set('Surrogate-Control', 'no-store');
+  if (IMAGE_RE.test(pathname)) {
+    // Static-ish assets: long CDN life, short browser life.
+    response.headers.set(
+      'Cache-Control',
+      'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800',
+    );
+    response.headers.set(
+      'Surrogate-Control',
+      'max-age=86400, stale-while-revalidate=604800',
+    );
+  } else {
+    // Public HTML (+ sitemap.xml / robots.txt): CDN caches 5 min and serves
+    // stale while revalidating; browsers always revalidate (max-age=0).
+    response.headers.set(
+      'Cache-Control',
+      'public, max-age=0, must-revalidate, s-maxage=300, stale-while-revalidate=86400',
+    );
+    response.headers.set(
+      'Surrogate-Control',
+      'max-age=300, stale-while-revalidate=86400',
+    );
+  }
   return response;
 }
 
