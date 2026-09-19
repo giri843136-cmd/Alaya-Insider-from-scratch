@@ -101,7 +101,11 @@ NOT STARTED (work in this order):
         the plain Node flow (npm install && npm run build && restart) per
         the platform truth. No revert is useful while the pipeline is
         stalled (a revert would not deploy either); prod is nonetheless
-        serving ba0d25c, a fully verified state.
+        serving ba0d25c, a fully verified state. UNBLOCK ATTEMPT
+        (2026-09-19): owner intervened in hPanel (hook repoint or restart);
+        prod still served old headers afterwards, consistent with no build
+        having run since the stall began — a fresh push is the trigger for
+        the repointed pipeline. This commit IS that trigger (docs-only).
 [ ] TASK 26 — drop `id` from public /api/categories
 [ ] TASK 27 — affiliate disclosure CONTRAST fix (implemented on
         wip/task-27-disclosure, awaiting merge). Accurate statement: the
