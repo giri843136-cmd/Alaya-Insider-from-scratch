@@ -41,9 +41,18 @@ NOT STARTED (work in this order):
 [ ] TASK 15 — remove "Honest Review"/testing overclaims
 [ ] TASK 16 — journal depth + affiliate links
 [ ] TASK 17 — slug year fix
-[ ] TASK 17b — repo-file exposure check
-        purge scripts/price-workflow.md from history; rotate credentials for
-        that host; repo was public since 68a016b (2026-08-24)
+[ ] TASK 17b — repo-file exposure check (UPDATED WAVE 0, 2026-09-19):
+        scripts/price-workflow.md REMOVED FROM HEAD (WAVE 0.2) — it carried
+        the infrastructure host address, SSH port and username at a public
+        raw URL; a full-tree token sweep proved it was the ONLY tracked file
+        carrying that address and that no private key material or key file
+        was ever tracked. HISTORY still holds it (repo public since
+        68a016b, 2026-08-24) — the chosen remedy is ROTATION of that host's
+        credentials by the owner, not history rewriting; the host belongs to
+        the cancelled VPS path (TASK 28). ASK_ME: rotate or formally
+        decommission those credentials.
+        (was: purge scripts/price-workflow.md from history; rotate
+        credentials for that host)
 [ ] TASK 18 — click tracking via sendBeacon on the existing /api/clicks
 [ ] TASK 19 — static + ISR
 [ ] TASK 20 — performance
