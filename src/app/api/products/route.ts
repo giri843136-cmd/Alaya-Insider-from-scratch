@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
-import { getAuthUser } from '@/lib/auth';
 import { publicProducts } from '@/lib/public-product';
-import { v4 as uuid } from 'uuid';
-import slugify from 'slugify';
+
+/**
+ * WAVE 0.5 (2026-09-19): the public write path is DELETED, not gated.
+ *
+ * This route used to carry an authenticated POST that created products.
+ * Product add/edit belongs exclusively to the double-gated admin route
+ * (middleware 401 + in-handler getAuthUser on /api/admin/products), which is
+ * what src/components/admin/ProductEditor.tsx already calls. Keeping a second
+ * write route behind a single auth check here meant one stolen session cookie
+ * allowed writes without the admin middleware layer, and every unauthenticated
+ * write attempt reached the handler before its 401. There is no caller left:
+ * admin writes go to /api/admin/products, CSV import to /api/products/import.
+ * Mutating methods on this URL answer 401 (never a handler run), see the
+ * [id] route for PUT/PATCH/DELETE stubs.
+ */
 
 export async function GET(req: NextRequest) {
   ensureDbReady();
@@ -133,81 +145,29 @@ export async function GET(req: NextRequest) {
   });
 }
 
-export async function POST(req: NextRequest) {
-  ensureDbReady();
-  const user = await getAuthUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  try {
-    const data = await req.json();
-    if (!data.name || !data.name.trim()) {
-      return NextResponse.json({ error: 'Product name is required' }, { status: 400 });
-    }
-    const db = getDb();
-    const id = uuid();
-    const slug = data.slug || slugify(data.name.trim(), { lower: true, strict: true });
-    if (!slug) {
-      return NextResponse.json({ error: 'Could not generate a valid URL slug from the product name' }, { status: 400 });
-    }
-
-    // Check slug uniqueness
-    const existing = db.prepare('SELECT id FROM products WHERE slug = ?').get(slug);
-    if (existing) {
-      return NextResponse.json({ error: 'A product with this URL slug already exists' }, { status: 400 });
-    }
-
-    const cols = [
-      'id','name','slug','brand_id','category_id','subcategory_id','sku',
-      'current_price','previous_price','currency','rating','review_count',
-      'primary_image','gallery_images','thumbnail','image_alt',
-      'short_description','full_description','why_we_recommend','best_for',
-      'benefits','pros','cons','buying_advice','specifications','tags',
-      'status','is_featured','is_trending','is_editors_pick',
-      'affiliate_url','marketplace','affiliate_network','tracking_id','cta_text',
-      'global_affiliate_url','global_affiliate_network','global_tracking_id','global_cta_label','global_active',
-      'india_affiliate_url','india_affiliate_network','india_tracking_id','india_cta_label','india_active',
-      'us_affiliate_url',
-      'additional_retailers','seo_title','seo_description','canonical_url','focus_keyword',
-      'created_by','published_at'
-    ];
-    const vals = [
-      id, data.name, slug, data.brand_id||null, data.category_id||null, data.subcategory_id||null, data.sku||'',
-      data.current_price||0, data.previous_price||null, data.currency||'USD', data.rating||0, data.review_count||0,
-      data.primary_image||'', JSON.stringify(data.gallery_images||[]), data.thumbnail||'', data.image_alt||'',
-      data.short_description||'', data.full_description||'', data.why_we_recommend||'', data.best_for||'',
-      typeof data.benefits === 'string' ? data.benefits : JSON.stringify(data.benefits||[]),
-      typeof data.pros === 'string' ? data.pros : JSON.stringify(data.pros||[]),
-      typeof data.cons === 'string' ? data.cons : JSON.stringify(data.cons||[]),
-      data.buying_advice||'',
-      typeof data.specifications === 'string' ? data.specifications : JSON.stringify(data.specifications||{}),
-      typeof data.tags === 'string' ? data.tags : JSON.stringify(data.tags||[]),
-      data.status||'draft', data.is_featured?1:0, data.is_trending?1:0, data.is_editors_pick?1:0,
-      data.affiliate_url||'', data.marketplace||'', data.affiliate_network||'', data.tracking_id||'', data.cta_text||'Check Price',
-      data.global_affiliate_url||'', data.global_affiliate_network||'', data.global_tracking_id||'', data.global_cta_label||'Explore Global Options', data.global_active!==false?1:0,
-      data.india_affiliate_url||'', data.india_affiliate_network||'', data.india_tracking_id||'', data.india_cta_label||'Explore India', data.india_active!==false?1:0,
-      data.us_affiliate_url||'',
-      JSON.stringify(data.additional_retailers||[]), data.seo_title||'', data.seo_description||'', data.canonical_url||'', data.focus_keyword||'',
-      user.id, data.status === 'published' ? new Date().toISOString() : null,
-    ];
-    db.prepare(`INSERT INTO products (${cols.join(',')}) VALUES (${cols.map(()=>'?').join(',')})`).run(...vals);
-
-    // Create affiliate link — use a unique slug to avoid UNIQUE constraint collisions
-    if (data.affiliate_url) {
-      try {
-        db.prepare(`INSERT INTO affiliate_links (id, product_id, slug, destination_url, marketplace, affiliate_network, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)`)
-          .run(uuid(), id, `link-${slug}`, data.affiliate_url, data.marketplace || '', data.affiliate_network || '');
-      } catch (linkErr: any) {
-        console.error('Affiliate link creation failed:', linkErr.message);
-      }
-    }
-
-    // Log
-    db.prepare('INSERT INTO activity_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(uuid(), user.id, 'created', 'product', id, `Product "${data.name}" created`);
-
-    return NextResponse.json({ id, slug }, { status: 201 });
-  } catch (e: any) {
-    console.error('Product create error:', e);
-    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
-  }
+/**
+ * WAVE 0.5: every mutating method on the public collection route answers a
+ * uniform 401 with no handler logic and no DB access — writes belong to the
+ * double-gated /api/admin/products. A missing export would 405; these stubs
+ * make the closure explicit and uniform.
+ */
+async function writeNotAllowed(): Promise<NextResponse> {
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
+
+export async function POST(): Promise<NextResponse> {
+  return writeNotAllowed();
+}
+
+export async function PUT(): Promise<NextResponse> {
+  return writeNotAllowed();
+}
+
+export async function PATCH(): Promise<NextResponse> {
+  return writeNotAllowed();
+}
+
+export async function DELETE(): Promise<NextResponse> {
+  return writeNotAllowed();
+}
+
