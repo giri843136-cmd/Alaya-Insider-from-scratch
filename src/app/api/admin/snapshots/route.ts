@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import { getAuthUser } from '@/lib/auth';
-import { checkSnapshotDir } from '@/lib/snapshot-policy';
+import { listSnapshots } from '@/lib/snapshot-policy';
 import { runSnapshotUnderPolicy } from '@/lib/snapshot';
-import fs from 'fs';
-import path from 'path';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,32 +29,28 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   ensureDbReady();
 
-  const check = checkSnapshotDir(process.env.SNAPSHOT_DIR, process.cwd());
-
-  let snapshots: Array<{ file: string; size: number; mtime: string }> = [];
-  if (check.ok && check.dir) {
-    try {
-      snapshots = fs
-        .readdirSync(check.dir)
-        .filter((f) => NAME_RE.test(f))
-        .map((f) => {
-          const st = fs.statSync(path.join(check.dir as string, f));
-          return { file: f, size: st.size, mtime: st.mtime.toISOString() };
-        })
-        .sort((a, b) => b.mtime.localeCompare(a.mtime));
-    } catch {
-      snapshots = [];
-    }
-  }
-
-  return NextResponse.json({
-    configured: check.ok,
-    reason: check.code,
-    message: check.message,
-    envVarNames: ['SNAPSHOT_DIR', 'SNAPSHOT_KEEP'],
-    keep: process.env.SNAPSHOT_KEEP || '7',
-    snapshots,
+  // READ-TIME GUARD: the shared listSnapshots runs every entry through the
+  // same path policy as the writer and flags anything under public/ (or the
+  // app root) with exposed: true — a backup in a web-served path must be
+  // LOUD in this response, never merely unlisted.
+  const { check, snapshots } = listSnapshots(process.env.SNAPSHOT_DIR, process.cwd(), {
+    nameRe: NAME_RE,
   });
+  const exposedCount = snapshots.filter((s) => s.exposed).length;
+
+  return NextResponse.json(
+    {
+      configured: check.ok,
+      reason: check.code,
+      message: check.message,
+      envVarNames: ['SNAPSHOT_DIR', 'SNAPSHOT_KEEP'],
+      keep: process.env.SNAPSHOT_KEEP || '7',
+      exposedCount,
+      exposed: exposedCount > 0,
+      snapshots,
+    },
+    { status: 200, headers: { 'Cache-Control': 'no-store' } },
+  );
 }
 
 export async function POST(req: NextRequest) {

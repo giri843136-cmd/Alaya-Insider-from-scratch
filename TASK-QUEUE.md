@@ -181,7 +181,18 @@ NOT STARTED (work in this order):
         cron UIs). Tests: snapshot.test.ts (9: policy refusals, happy path,
         integrity-fatal removal, retention) + snapshot.endpoints.test.ts
         (10: both gates, 409 UNSET semantics, alias, query-string
-        rejection). ASK_ME still stands: SNAPSHOT_DIR must be set in hPanel
+        rejection). READ-TIME GUARD (2026-09-19, owner-approved follow-up):
+        GET /api/admin/snapshots now routes the listing through the SAME
+        checkSnapshotDir policy via listSnapshots() — every entry carries an
+        explicit `exposed` flag (true when it resolves under public/ or the
+        app root) plus a top-level exposed/exposedCount summary, so a backup
+        that somehow lands in a web-served path is LOUD in the admin response,
+        never merely unlisted by the write-time policy. Found and fixed by
+        the guard's own tests: the naive implementation suppressed the
+        listing when the dir failed policy — exactly the case where a backup
+        sits inside public/; forbidden-but-existing dirs are now still listed
+        with every entry forced exposed:true (UNSET/absent dirs still list
+        nothing). ASK_ME still stands: SNAPSHOT_DIR must be set in hPanel
         to a writable path OUTSIDE the app dir (and outside public/) —
         until then every snapshot surface answers 409 UNSET / disabled by
         design; nothing is guessed.

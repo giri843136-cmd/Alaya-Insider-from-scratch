@@ -55,6 +55,8 @@ describe('dead VPS artefacts stay deleted', () => {
       if (!/\.(md|ts|tsx|js|mjs|cjs|json|sh|yml|yaml|txt|example)$/.test(f)) continue;
       if (/^\.next\//.test(f) || /^node_modules\//.test(f)) continue;
       if (f === 'TASK-QUEUE.md') continue; // the ledger records the deletion itself
+      // This guard file must contain the paths (it is the tripwire).
+      if (f.endsWith('dead-vps-artifacts.guard.test.ts')) continue;
       let content: string;
       try {
         content = require('fs').readFileSync(f, 'utf8');

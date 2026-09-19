@@ -45,7 +45,7 @@ const dbPath = path.join(dbDir, 'alaya.db');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { runSnapshot, runSnapshotUnderPolicy } = require('@/lib/snapshot');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { checkSnapshotDir } = require('@/lib/snapshot-policy');
+const { checkSnapshotDir, listSnapshots } = require('@/lib/snapshot-policy');
 
 function seedSourceDb() {
   const db = new Database(dbPath);
@@ -126,6 +126,57 @@ describe('runSnapshotUnderPolicy', () => {
     expect(fs.statSync(written).size).toBeGreaterThan(0);
     // filename carries NO database-name bytes beyond the fixed "alaya" prefix
     expect(r.file).not.toContain('alaya.db');
+  });
+});
+
+describe('read-time guard (listSnapshots)', () => {
+  it('re-uses the same policy: an unset/inside-root dir yields no listing', () => {
+    expect(listSnapshots(undefined, appRoot).snapshots).toEqual([]);
+    expect(listSnapshots(undefined, appRoot).check.code).toBe('UNSET');
+    const inside = listSnapshots(path.join(appRoot, 'backups'), appRoot);
+    expect(inside.snapshots).toEqual([]);
+    expect(inside.check.code).toBe('INSIDE_APP_ROOT');
+  });
+
+  it('lists snapshots outside the app root with exposed:false', () => {
+    const outside = path.join(tmpRoot, 'guard-outside');
+    fs.mkdirSync(outside, { recursive: true });
+    makeSnapshot('alaya-20240101T000000Z.db', outside);
+    const { snapshots } = listSnapshots(outside, appRoot);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].exposed).toBe(false);
+    expect(snapshots[0].size).toBeGreaterThan(0);
+    expect(snapshots[0].mtime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('marks a backup resolving under public/ as exposed:true — loud, not unlisted', () => {
+    // Simulate a backup that landed inside public/ by creating a scratch
+    // appRoot-shaped tree and pointing the listing at the public dir.
+    const fakeRoot = path.join(tmpRoot, 'fake-app');
+    const fakePublic = path.join(fakeRoot, 'public', 'backups');
+    fs.mkdirSync(fakePublic, { recursive: true });
+    makeSnapshot('alaya-20240101T000000Z.db', fakePublic);
+    const { snapshots } = listSnapshots(fakePublic, fakeRoot);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].exposed).toBe(true);
+  });
+
+  it('exposure follows real resolution, not the raw env string', () => {
+    const fakeRoot = path.join(tmpRoot, 'fake-app2');
+    const fakePublic = path.join(fakeRoot, 'public');
+    fs.mkdirSync(path.join(fakePublic, 'x'), { recursive: true });
+    makeSnapshot('alaya-20240101T000000Z.db', fakePublic);
+    // A raw string with a .. segment that RESOLVES into public/ must be
+    // listed from its resolved location and flagged exposed.
+    const viaDotDot = path.join(fakePublic, 'x', '..');
+    const r = listSnapshots(viaDotDot, fakeRoot);
+    expect(r.snapshots).toHaveLength(1);
+    expect(r.snapshots[0].exposed).toBe(true);
+    expect(r.check.code).toBe('INSIDE_PUBLIC');
+    // A direct alias (no dot segments) is equally flagged.
+    const r2 = listSnapshots(fakePublic, fakeRoot);
+    expect(r2.snapshots).toHaveLength(1);
+    expect(r2.snapshots[0].exposed).toBe(true);
   });
 });
 
