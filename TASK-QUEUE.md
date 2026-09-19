@@ -181,6 +181,29 @@ QUEUE ORDER AFTER 31/32: resume TASK 27 (disclosure placement + contrast —
 
 ## Notes
 
+- WAVE 0.5 (2026-09-19, user-directed interrupt; DONE, commits 3b7d14e +
+  a77322d): admin product add/edit was BROKEN in production —
+  ProductEditor.tsx POSTs/PUTs/GET-deletes on /api/admin/products[/id], but
+  only the list GET ever existed (bare 405/404). Root cause: TASK 1 moved
+  admin reads to /api/admin/* and never created the write handlers. FIXED:
+  (1) public /api/products write path DELETED — every mutating method on
+  /api/products and /api/products/[id] answers a uniform 401, session or no
+  session (public-write-path.closed.test.ts; the old public POST was
+  session-gated and reached its handler before 401). (2) The admin write
+  handlers now EXIST (route.ts POST + [id]/route.ts GET/PUT/DELETE) with
+  per-field human-readable validation (400 field_errors), server-side
+  publish blockers (422, texts = editor modal), FK reference checks
+  ("choose from the list"), and NULL-safe commercial fields — absent stores
+  NULL, explicit 0 stays 0, explicit null clears; public projection keeps
+  them stripped (admin-product-flow.test.ts, 16 steps, green). Admin list
+  Archive buttons repointed to the admin route. Authenticated production
+  verify (user session, create→read→delete probe) PENDING on the user.
+  Step-10 sweep RESULT (report-only): contact GET leaks ALL submissions
+  unauthenticated; settings GET + newsletter POST ungated; articles/hero
+  ?admin=true serve drafts unauthenticated; comparisons/collections public
+  GETs include drafts; categories ?flat=true leaks id/slug/parent_id/
+  sort_order; users POST lacks a role gate (super_admin only by
+  convention); brands/[id] + categories/[id] GET full rows unauthenticated.
 - PROCESS RULE (user-mandated 2026-09-18, recorded in the TASK 31 step-1
   commit): **force-push is allowed ONLY on unmerged wip branches. NEVER on
   main. NEVER after a task has been review-approved.** Prefer a new commit
