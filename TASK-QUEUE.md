@@ -62,8 +62,12 @@ NOT STARTED (work in this order):
 [ ] TASK 23 — GSC/Bing runbook
 [ ] TASK 24 — revenue report
 [ ] TASK 25 — deploy docs
-[x] TASK 11 — cache-control (DONE 2026-09-19, WAVE 1; one commit,
-        live-verified per RULE 11 with the double-curl proof). MIDDLEWARE
+[ ] TASK 11 — cache-control (IMPLEMENTED 2026-09-19, WAVE 1; commit
+        0bd766d. DISPOSITION: BLOCKED at production verification by a
+        HOST-SIDE deploy stall — see the incident record below. The change
+        is locally proven correct (next start on the built bundle) and
+        stays on main; do NOT stack further tasks on it until the runtime
+        restarts and the double-curl proof passes. MIDDLEWARE
         AUDIT BEFORE (src/middleware.ts): /admin/* authed+redirect no-store
         (41-51), /admin/login no-store (55-58), /api/admin/* no-store
         (62-71) — all kept verbatim; the DEFAULT branch (87-93) stamped
