@@ -10,6 +10,7 @@
  * comments) as if it still existed.
  */
 import { execSync } from 'child_process';
+import fs from 'fs';
 
 const DEAD_FILES = [
   'scripts/deploy-hostinger.sh',
@@ -35,10 +36,29 @@ const LIVE_REF_PATTERNS = [
 ];
 
 function trackedFiles(): string[] {
-  return execSync('git ls-files', { encoding: 'utf8' })
-    .split('\n')
-    .map((f) => f.trim())
-    .filter(Boolean);
+  // Preferred: ask git (exact tracked set). FAIL-SAFE: some deploy
+  // environments run tests outside a git worktree — there, fall back to a
+  // recursive filesystem walk of the project (skipping .git/node_modules/
+  // .next) so the guard still runs instead of crashing the suite.
+  try {
+    return execSync('git ls-files', { encoding: 'utf8' })
+      .split('\n')
+      .map((f) => f.trim())
+      .filter(Boolean);
+  } catch {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of fs.readdirSync(dir)) {
+        if (name === '.git' || name === 'node_modules' || name === '.next') continue;
+        const p = `${dir}/${name}`;
+        const st = fs.statSync(p);
+        if (st.isDirectory()) walk(p);
+        else out.push(p.replace(/^\.\//, ''));
+      }
+    };
+    walk('.');
+    return out;
+  }
 }
 
 describe('dead VPS artefacts stay deleted', () => {
