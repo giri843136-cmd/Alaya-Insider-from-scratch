@@ -62,12 +62,34 @@ NOT STARTED (work in this order):
 [ ] TASK 23 — GSC/Bing runbook
 [ ] TASK 24 — revenue report
 [ ] TASK 25 — deploy docs
-[ ] TASK 11 — cache-control (IMPLEMENTED 2026-09-19, WAVE 1; commit
-        0bd766d. DISPOSITION: BLOCKED at production verification by a
-        HOST-SIDE deploy stall — see the incident record below. The change
-        is locally proven correct (next start on the built bundle) and
-        stays on main; do NOT stack further tasks on it until the runtime
-        restarts and the double-curl proof passes. MIDDLEWARE
+[ ] TASK 11 — cache-control (REVERTED 2026-09-19 per the owner's rule 2:
+        production verification failed, fix-forward exhausted, so main must
+        match what prod serves. Commit 0bd766d preserved on wip/task-11-cache
+        (pushed). Final evidence — even after the owner's hPanel unblock AND
+        a fresh trigger push, prod kept serving the OLD header combo, while
+        a LOCAL boot of the same tree emitted the new one. TIMELINE: ba0d25c
+        deployed in ~2 min; every commit from 720603f onward produced ZERO
+        runtime change. SMOKING GUN for an edge-side header rewrite: mixed
+        casing in one response — Node emits what Next sets ('Cache-Control',
+        capital), but / comes back with lowercase 'cache-control:' +
+        'surrogate-control:' while 'Pragma:'/'Expires:' arrive CAPITALIZED
+        (a second, non-Node header source) — consistent with hcdn/LiteSpeed
+        rewriting Cache-Control to no-store for dynamic responses REGARDLESS
+        of origin. The original implementation record (audit + policy + 9
+        tests) is preserved in the 0bd766d commit message and the wip
+        branch. MIDDLEWARE AUDIT AS OF THE REVERT (serving state):
+        /admin/* authed+redirect no-store (41-51), /admin/login no-store
+        (55-58), /api/admin/* no-store (62-71) — all kept verbatim; the
+        DEFAULT branch (87-93) stamped 'no-store, no-cache,
+        must-revalidate, proxy-revalidate' + Pragma: no-cache + Expires: 0
+        + Surrogate-Control: no-store on EVERYTHING
+        public — HTML, images, robots.txt, sitemap — forcing hcdn to re-fetch
+        origin for every request (the cache mistake). RE-LANDING PATH (after
+        the ASK_ME answers): if the edge is the rewriter, Cache-Control must
+        be set in a place the edge honours (next.config headers(), or the
+        hPanel/LiteSpeed cache toggle enabled) — NOT the middleware, which
+        the edge demonstrably overrides; if the stall was the only issue,
+        re-land 0bd766d as-is and re-run the double-curl.
         AUDIT BEFORE (src/middleware.ts): /admin/* authed+redirect no-store
         (41-51), /admin/login no-store (55-58), /api/admin/* no-store
         (62-71) — all kept verbatim; the DEFAULT branch (87-93) stamped
