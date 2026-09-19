@@ -143,6 +143,28 @@ NOT STARTED (work in this order):
         internal script or only trigger an HTTP endpoint (if HTTP-only: a
         /api/cron/snapshot route guarded by CRON_SECRET writing to
         SNAPSHOT_DIR).
+        STATUS UPDATE (2026-09-19, WAVE 1, commit follows): 31b IMPLEMENTED
+        as HTTP-only tooling — scripts/snapshot-db.mjs CLI was deliberately
+        DISCARDED during development (importing a process.exit-calling CLI
+        into the Next server is a footgun, and hPanel cron runs URLs, not
+        shells). Shipped instead: src/lib/snapshot-policy.ts
+        (checkSnapshotDir — UNSET/INSIDE_PUBLIC/INSIDE_APP_ROOT refusals,
+        public/ checked FIRST so the doubly-forbidden case gets its own
+        code), src/lib/snapshot.ts (runSnapshot: VACUUM INTO to a
+        timestamp-only filename alaya-YYYYMMDDTHHMMSSZ.db, integrity_check
+        on the COPY with any failure FATAL and the failed file REMOVED,
+        retention oldest-first that never deletes the in-flight file),
+        GET+POST /api/admin/snapshots (session-gated status listing size+
+        mtime; env variable NAMES only, never values; POST = manual
+        trigger) and /api/cron/snapshot (x-cron-secret/x-api-key HEADER-ONLY
+        — no ?secret=, per the TASK 32 log-safe rule; GET aliases POST for
+        cron UIs). Tests: snapshot.test.ts (9: policy refusals, happy path,
+        integrity-fatal removal, retention) + snapshot.endpoints.test.ts
+        (10: both gates, 409 UNSET semantics, alias, query-string
+        rejection). ASK_ME still stands: SNAPSHOT_DIR must be set in hPanel
+        to a writable path OUTSIDE the app dir (and outside public/) —
+        until then every snapshot surface answers 409 UNSET / disabled by
+        design; nothing is guessed.
 [ ] TASK 32 — hourly price-refresh wiring (BLOCKED on user): needs env
         var NAMES CREATORS_* (client id/secret) + CRON_SECRET set in
         hPanel — values are the user's to paste, never the agent's to
