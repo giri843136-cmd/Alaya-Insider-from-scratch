@@ -78,10 +78,26 @@ NOT STARTED (work in this order):
         get 'public, max-age=0, must-revalidate, s-maxage=300,
         stale-while-revalidate=86400'. NO Vary on cookies (must-not-vary-on-
         cookie: the cached object IS the anonymous render); no Set-Cookie is
-        added. Tests: middleware.cache-policy.test.ts (9). next.config.mjs
+        added.        Tests: middleware.cache-policy.test.ts (9). next.config.mjs
         /admin/:path* no-store unchanged. HCDN CAVEAT (unverifiable from the
         repo): whether hcdn honours s-maxage/Surrogate-Control is host-side;
         the prod double-curl proof below shows what the edge actually does.
+        VERIFICATION INCIDENT (open): prod kept serving the OLD middleware
+        headers 30+ min after 0bd766d. Local boot of the same build PROVES
+        the new code correct (GET / -> public, max-age=0, must-revalidate,
+        s-maxage=300, stale-while-revalidate=86400; /api/* no-store; /admin
+        302 no-store). Served chunks match the LATEST build on disk while the
+        running process behaves pre-ba0d25c => the hPanel runtime has not
+        restarted since ba0d25c. The stall began EXACTLY at 720603f (the
+        approved deletion commit) — PLAUSIBLE CAUSE: the hPanel git
+        integration's deploy action itself invokes one of the deleted
+        scripts (e.g. scripts/deploy.sh) — a host-side config invisible in
+        the repo. ASK_ME (owner, hPanel): check the deploy log / git
+        integration action; if it references a deleted script, repoint it to
+        the plain Node flow (npm install && npm run build && restart) per
+        the platform truth. No revert is useful while the pipeline is
+        stalled (a revert would not deploy either); prod is nonetheless
+        serving ba0d25c, a fully verified state.
 [ ] TASK 26 — drop `id` from public /api/categories
 [ ] TASK 27 — affiliate disclosure CONTRAST fix (implemented on
         wip/task-27-disclosure, awaiting merge). Accurate statement: the
