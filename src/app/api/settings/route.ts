@@ -3,7 +3,14 @@ import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
+/**
+ * WAVE 0.5b: the full site_settings table (incl. contact_email and every
+ * other admin-configured value) must not leave the server unauthenticated.
+ * The admin settings page is the only consumer; PUT is already gated.
+ */
 export async function GET() {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   ensureDbReady();
   const db = getDb();
   const settings = db.prepare('SELECT * FROM site_settings').all() as any[];

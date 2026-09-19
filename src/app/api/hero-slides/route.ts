@@ -9,6 +9,13 @@ export async function GET(req: NextRequest) {
   const db = getDb();
   const isAdmin = new URL(req.url).searchParams.get('admin') === 'true';
 
+  // WAVE 0.5b: ?admin=true returns draft/scheduled slides with status fields
+  // — admin-only data, fail CLOSED (401) for unauthenticated callers.
+  if (isAdmin) {
+    const user = await getAuthUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   let slides;
   if (isAdmin) {
     slides = db.prepare('SELECT * FROM hero_slides ORDER BY sort_order ASC').all();

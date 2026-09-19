@@ -8,8 +8,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   ensureDbReady();
   const { id } = await params;
   const db = getDb();
-  const brand = db.prepare('SELECT * FROM brands WHERE id = ? OR slug = ?').get(id, id);
+  const brand = db.prepare('SELECT * FROM brands WHERE id = ? OR slug = ?').get(id, id) as any;
   if (!brand) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // WAVE 0.5b (leak proven live via a real slug): the full row (internal id,
+  // description, website_url, is_featured, timestamps) is admin data.
+  // Unauthenticated callers get the same allow-listed shape as /api/brands;
+  // the admin brand editor always sends a session and keeps the full row.
+  const user = await getAuthUser();
+  if (!user) {
+    return NextResponse.json({
+      brand: {
+        name: brand.name,
+        slug: brand.slug,
+        logo: brand.logo || '',
+        description: brand.description || '',
+      },
+    });
+  }
   return NextResponse.json({ brand });
 }
 

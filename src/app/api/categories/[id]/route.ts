@@ -8,6 +8,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const db = getDb();
 
+  // WAVE 0.5b: the full row + children tree (id, slug, parent_id, sort_order,
+  // seo_*) is admin data — same shape TASK 26 strips from the public list.
+  // The admin category tree is the only consumer of this handler. The gate
+  // sits BEFORE the lookup so unauthenticated callers cannot use 404-vs-200
+  // as a category-existence oracle.
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const category = db.prepare(`
     SELECT c.*, pc.name as parent_name
     FROM categories c

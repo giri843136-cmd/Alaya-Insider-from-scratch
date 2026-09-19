@@ -7,6 +7,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   ensureDbReady();
   const { id } = await params;
   const db = getDb();
+
+  // WAVE 0.5b: this handler returns the COMPLETE article row (drafts included,
+  // match by id OR slug) — that is the admin editor's load path, not a public
+  // endpoint. Public readers use the /journal/[slug] server component, which
+  // enforces published-only itself. The gate sits BEFORE the lookup so
+  // unauthenticated callers cannot use 404-vs-200 as an existence oracle.
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const article = db.prepare(`
     SELECT a.*, ac.name as category_name, ac.slug as category_slug,
            u.first_name || ' ' || u.last_name as author_name

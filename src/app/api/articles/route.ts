@@ -17,6 +17,14 @@ export async function GET(req: NextRequest) {
   const featured = url.searchParams.get('featured');
   const isAdmin = url.searchParams.get('admin') === 'true';
 
+  // WAVE 0.5b: ?admin=true switches on draft/in_review/ready rows and status
+  // filtering — that is admin-only data. Fail CLOSED (401), never silently
+  // downgrade to the public shape.
+  if (isAdmin) {
+    const user = await getAuthUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   let where = ['a.deleted_at IS NULL'];
   const params: any[] = [];
 

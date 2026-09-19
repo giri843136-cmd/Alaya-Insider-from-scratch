@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureDbReady } from '@/lib/init';
 import getDb from '@/lib/db';
+import { getAuthUser } from '@/lib/auth';
 import { v4 as uuid } from 'uuid';
 import { rateLimit, getClientIP } from "@/lib/rate-limit";
 
@@ -20,7 +21,14 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ message: 'Thank you for your message. We will get back to you soon.' }, { status: 201 });
 }
 
+/**
+ * WAVE 0.5b: this returned EVERY contact submission (names, emails, messages)
+ * to unauthenticated callers — the admin inbox is the only consumer.
+ * Session-gated like every other admin read.
+ */
 export async function GET() {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   ensureDbReady();
   const submissions = getDb().prepare('SELECT * FROM contact_submissions ORDER BY created_at DESC').all();
   return NextResponse.json({ submissions });

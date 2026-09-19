@@ -204,6 +204,30 @@ QUEUE ORDER AFTER 31/32: resume TASK 27 (disclosure placement + contrast —
   GETs include drafts; categories ?flat=true leaks id/slug/parent_id/
   sort_order; users POST lacks a role gate (super_admin only by
   convention); brands/[id] + categories/[id] GET full rows unauthenticated.
+- WAVE 0.5b (2026-09-19, user probes + repo verify; same session): nine
+  admin-read GET endpoints were ungated. FIXED (all in-handler, fail CLOSED,
+  before any row lookup so no 404-vs-200 existence oracle): /api/settings GET
+  (full site_settings incl. contact_email — USER-PROVEN leak), /api/contact
+  GET (every submission incl. emails), /api/articles?admin=true (drafts +
+  status filter — USER-PROVEN), /api/hero-slides?admin=true (drafts —
+  USER-PROVEN), /api/articles/[id|slug] (COMPLETE row incl. drafts),
+  /api/categories/[id|slug] (full row + children tree). /api/brands/[id|slug]
+  keeps a PUBLIC allow-listed shape (name/slug/logo/description) because the
+  public list serves brands; full row needs a session (FULL-ROW leak proven
+  live via a real slug: internal UUID, website_url, is_featured). SWEEP
+  CORRECTIONS recorded honestly: (1) users POST ALREADY required
+  permissions.all — no escalation hole, my earlier flag was wrong;
+  (2) newsletter POST ALREADY rate-limited 5/min;
+  (3) comparisons/collections GETs ALREADY filtered published/active — my
+  sweep line was wrong; (4) the user's ZERO-BYTE comparisons 200 was an
+  hcdn JS-challenge interstitial artifact (repro'd 403 HTML + stable 845 B
+  JSON after) — NOT an app response; (5) the [id] 404s in the user's probes
+  were numeric-id artifacts — these routes match UUID-OR-SLUG, so slugs DID
+  leak (proven). Known remaining: public /api/categories?flat=true still
+  carries id/parent_id/sort_order (TASK 26 owns it; the admin category tree
+  currently consumes that endpoint — give it a gated variant when 26 lands).
+  Tests: admin-read-gates.test.ts (13 + 1 todo), suite 22/208 green, tsc 0.
+
 - PROCESS RULE (user-mandated 2026-09-18, recorded in the TASK 31 step-1
   commit): **force-push is allowed ONLY on unmerged wip branches. NEVER on
   main. NEVER after a task has been review-approved.** Prefer a new commit
