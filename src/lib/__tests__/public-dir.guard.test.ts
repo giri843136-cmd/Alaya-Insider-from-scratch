@@ -49,6 +49,19 @@ describe('public/ directory security guard', () => {
     expect(offenders).toEqual([]);
   });
 
+  // WAVE 0.3: name-based checks can be evaded by renaming. auth-test.html's
+  // real signature was a static page containing a login FORM — catch that by
+  // content, whatever the file is called.
+  it('contains no static page with a password form (renamed credential harnesses)', () => {
+    const offenders = walk(publicDir)
+      .filter((f) => TEXT_EXT.has(path.extname(f).toLowerCase()))
+      .filter((f) => {
+        const text = fs.readFileSync(f, 'utf8');
+        return /<form[\s\S]*type=["']password["']/i.test(text) || /<input[^>]*type=["']password["']/i.test(text);
+      });
+    expect(offenders).toEqual([]);
+  });
+
   it('contains no database or snapshot files (TASK 31: snapshots must never live in public/)', () => {
     const offenders = walk(publicDir).filter((f) =>
       /\.(db|sqlite|sqlite3|db-wal|db-shm|bak)$/i.test(path.basename(f)),

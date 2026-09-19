@@ -190,6 +190,32 @@ QUEUE ORDER AFTER 31/32: resume TASK 27 (disclosure placement + contrast —
 
 ## Notes
 
+- WAVE 0 (2026-09-19, autonomous run; commits 5fc7d1b merge + 874e2a3):
+  0.1 DONE — main adopted wip/task-31-snapshot-hardening (realpath
+  containment, 31a prerequisite) via no-ff merge 5fc7d1b; wip/queue-ops was
+  a STALE pre-merge snapshot (its only unique commit's text already on main
+  verbatim; its tree would have reverted main 2,140 lines) so it was NOT
+  merged, deliberately; wip/task-31-snapshot-hardening,
+  wip/task-27-disclosure (already merged via PR #2) and wip/queue-ops
+  deleted on the remote, plus wip/task-30-password (fully merged at
+  4bb7620). Prod verify: traversal probes 400/404, nonexistent file 404
+  with EMPTY body. 0.2 DONE — scripts/price-workflow.md removed from HEAD
+  (874e2a3); token sweep proved it was the ONLY tracked file carrying the
+  leaked infra address; no private keys/key files tracked; raw URL now 404;
+  HISTORY still holds it — remedy is owner-side ROTATION (ASK_ME). 0.3
+  DONE — public/ already clean (testers removed in eb09a2e); public-dir
+  guard extended with a content-based check: no static page may contain a
+  password input, whatever its filename. 0.4 PENDING (honest): the prod
+  DB is unreachable from this sandbox (no SSH/host access) and BOTH
+  mutation paths need the current password — bootstrap endpoints would
+  recreate the hole class; owner steps handed over below (ASK_ME). 0.5
+  DONE — deploy mechanism confirmed: NO GitHub workflows, NO postbuild
+  scripts, NOTHING in-repo pulls from main; hPanel's git integration is
+  the sole deploy trigger. 0.4 owner steps (admin UI): sign in →
+  /admin/settings → Change Password → require current password → new
+  >=20-char password from a password manager → the 4bb7620 rule kills
+  every existing session on save.
+
 - WAVE 0.5 (2026-09-19, user-directed interrupt; DONE, commits 3b7d14e +
   a77322d): admin product add/edit was BROKEN in production —
   ProductEditor.tsx POSTs/PUTs/GET-deletes on /api/admin/products[/id], but
